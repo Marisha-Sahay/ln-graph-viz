@@ -176,6 +176,9 @@ function createVisualization(data) {
         labelDensity: 0.07,
         labelGridCellSize: 60,
         labelRenderedSizeThreshold: 6,
+        enableEdgeEvents: true,
+        enableEdgeHoverEvents: 'debounce',
+        enableEdgeClickEvents: true,
         defaultEdgeType: "line",
         minEdgeSize: MIN_EDGE_WIDTH,
         maxEdgeSize: MAX_EDGE_WIDTH,
@@ -201,55 +204,6 @@ function createVisualization(data) {
     });
 
     let selectedNode = null;
-
-    // Update edge visibility when a node is selected
-    renderer.on('clickNode', event => {
-        selectedNode = selectedNode === event.node ? null : event.node;
-        
-        graph.forEachEdge(edge => {
-            const edgeData = graph.getEdgeAttributes(edge);
-            graph.setEdgeAttribute(edge, 'hidden', !shouldDisplayEdge(graph, edge, selectedNode));
-        });
-        
-        renderer.refresh();
-        // Node click to show details in sidebar
-        const nodeId = event.node;
-        const nodeAttributes = graph.getNodeAttributes(nodeId);
-        const attrs = nodeAttributes.attributes;
-
-        let categoryCountsHtml = '';
-        try {
-            const categoryCountsObj = typeof attrs.categoryCount === 'string' 
-                ? JSON.parse(attrs.categoryCount) 
-                : attrs.categoryCount;
-                
-            if (categoryCountsObj && typeof categoryCountsObj === 'object') {
-                for (const [category, count] of Object.entries(categoryCountsObj)) {
-                    categoryCountsHtml += `<div><span class="info-label">${category}:</span> ${count}</div>`;
-                }
-            } else {
-                categoryCountsHtml = `<div>${attrs.categoryCount || 'N/A'}</div>`;
-            }
-        } catch (e) {
-            categoryCountsHtml = `<div>${attrs.categoryCount || 'N/A'}</div>`;
-        }
-
-        document.getElementById('node-info').innerHTML = `
-            <div class="info-title">${nodeAttributes.label}</div>
-            <div class="info-content">
-                <div><span class="info-label">Type:</span> ${attrs.nodeType || 'Unknown'}</div>
-                <div><span class="info-label">Total Capacity:</span> ${attrs.totalCapacity}</div>
-                <div><span class="info-label">Total Channels:</span> ${attrs.totalChannels}</div>
-                <div><span class="info-label">Channel Segment:</span> ${attrs.channelSegment}</div>
-                <div><span class="info-label">Pleb Rank:</span> ${attrs.plebRank}</div>
-                <div><span class="info-label">Capacity Rank:</span> ${attrs.capacityRank}</div>
-                <div><span class="info-label">Channels Rank:</span> ${attrs.channelsRank}</div>
-                <div><span class="info-label">Public Key:</span> ${attrs.pubKey}</div>
-                <div style="margin-top: 10px;"><span class="info-label">Channel Categories:</span></div>
-                ${categoryCountsHtml}
-            </div>
-        `;
-    });
 
     // Set up tooltips
     const tooltip = document.getElementById('tooltip');
@@ -412,9 +366,7 @@ function createVisualization(data) {
     });
 
     // Force Atlas 2 layout
-    const forceAtlas2 = graphology.layouts && graphology.layouts.forceAtlas2 ? 
-                       graphology.layouts.forceAtlas2 : 
-                       window.forceAtlas2;
+    const forceAtlas2 = graphologyLibrary.layoutForceAtlas2; 
                        
     if (!forceAtlas2) {
         console.error('ForceAtlas2 layout not found');

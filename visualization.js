@@ -1,3 +1,51 @@
+// Constants for visualization
+const MIN_NODE_SIZE = 3;
+const MAX_NODE_SIZE = 15;
+const MIN_EDGE_WIDTH = 0.2;
+const MAX_EDGE_WIDTH = 2;
+
+// Utility functions for size calculations
+function calculateNodeSize(totalChannels, minChannels, maxChannels) {
+    if (!totalChannels || !maxChannels) return MIN_NODE_SIZE;
+    // Use log scale and handle edge cases
+    const normalizedValue = (Math.log(Math.max(totalChannels, 1)) - Math.log(Math.max(minChannels, 1))) / 
+                          (Math.log(maxChannels) - Math.log(Math.max(minChannels, 1)));
+    return MIN_NODE_SIZE + normalizedValue * (MAX_NODE_SIZE - MIN_NODE_SIZE);
+}
+
+function calculateEdgeWidth(capacity, minCapacity, maxCapacity) {
+    if (!capacity || !maxCapacity) return MIN_EDGE_WIDTH;
+    // Use log scale and handle edge cases
+    const normalizedValue = (Math.log(Math.max(capacity, 1)) - Math.log(Math.max(minCapacity, 1))) / 
+                          (Math.log(maxCapacity) - Math.log(Math.max(minCapacity, 1)));
+    return MIN_EDGE_WIDTH + normalizedValue * (MAX_EDGE_WIDTH - MIN_EDGE_WIDTH);
+}
+
+function shouldDisplayEdge(graph, edge, selectedNode = null) {
+    if (selectedNode) {
+        const source = graph.source(edge);
+        const target = graph.target(edge);
+        return source === selectedNode || target === selectedNode;
+    }
+    const edgeAttrs = graph.getEdgeAttributes(edge);
+    const capacity = edgeAttrs.attributes?.capacity;
+    const maxCapacity = edgeAttrs.attributes?.maxCapacity;
+    return capacity > maxCapacity / 2;
+}
+
+function getEdgeStyle(capacity, minCapacity, maxCapacity) {
+    if (!capacity || !maxCapacity) return { type: "dashed" };
+    const range = maxCapacity - minCapacity;
+    const normalizedCapacity = (capacity - minCapacity) / range;
+    
+    if (normalizedCapacity <= 0.25) {
+        return { type: "dashed" };
+    } else if (normalizedCapacity <= 0.5) {
+        return { type: "dashed" };
+    }
+    return { type: "line" };
+}
+
 // Main visualization function that loads JSON data and initializes the graph
 function initVisualization(jsonFile) {
     // Load the JSON data
@@ -49,6 +97,15 @@ function createVisualization(data) {
         }
     }
 
+    // Calculate min/max values for dynamic scaling
+    const nodeChannels = nodes.map(node => node.Total_Channels || 0);
+    const minChannels = Math.min(...nodeChannels.filter(c => c > 0)) || 1;
+    const maxChannels = Math.max(...nodeChannels);
+    
+    const edgeCapacities = edges.map(edge => edge.capacity || 0);
+    const minCapacity = Math.min(...edgeCapacities.filter(c => c > 0)) || 1;
+    const maxCapacity = Math.max(...edgeCapacities);
+
     // Add nodes to the graph
     nodes.forEach(node => {
         // Set node color based on type if not already set
@@ -59,7 +116,7 @@ function createVisualization(data) {
         graph.addNode(node.id, {
             x: node.x || Math.random() * 100,
             y: node.y || Math.random() * 100,
-            size: node.size || 5,
+            size: calculateNodeSize(node.Total_Channels, minChannels, maxChannels),
             label: node.label || node.alias || node.id,
             color: node.color,
             // Store all attributes for display
@@ -87,14 +144,16 @@ function createVisualization(data) {
             }
             
             graph.addEdge(edge.source, edge.target, {
-                size: edge.size || 1,
+                size: calculateEdgeWidth(edge.capacity, minCapacity, maxCapacity),
                 color: edge.color,
                 // Store all attributes for display
                 attributes: {
                     id: edge.id,
                     channelSizeTier: edge.Channel_Size_Tier,
                     channelSizeRange: edge.Channel_Size_Range,
-                    capacity: edge.capacity
+                    capacity: edge.capacity,
+                    minCapacity: minCapacity,
+                    maxCapacity: maxCapacity
                 }
             });
         } catch (e) {
@@ -116,7 +175,80 @@ function createVisualization(data) {
         defaultNodeHoverColor: '#000',
         labelDensity: 0.07,
         labelGridCellSize: 60,
-        labelRenderedSizeThreshold: 6
+        labelRenderedSizeThreshold: 6,
+        defaultEdgeType: "line",
+        minEdgeSize: MIN_EDGE_WIDTH,
+        maxEdgeSize: MAX_EDGE_WIDTH,
+        reducers: {
+            edgeReducer: (edge, data) => {
+                if (!data || !edge) return null;
+                const edgeData = graph.getEdgeAttributes(edge);
+                if (!edgeData || !edgeData.attributes) return { ...data, hidden: true };
+                
+                const capacity = edgeData.attributes.capacity;
+                const minCapacity = edgeData.attributes.minCapacity;
+                const maxCapacity = edgeData.attributes.maxCapacity;
+                const style = getEdgeStyle(capacity, minCapacity, maxCapacity);
+                
+                return {
+                    ...data,
+                    hidden: !shouldDisplayEdge(graph, edge, selectedNode),
+                    type: style.type,
+                    size: calculateEdgeWidth(capacity, minCapacity, maxCapacity)
+                };
+            }
+        }
+    });
+
+    let selectedNode = null;
+
+    // Update edge visibility when a node is selected
+    renderer.on('clickNode', event => {
+        selectedNode = selectedNode === event.node ? null : event.node;
+        
+        graph.forEachEdge(edge => {
+            const edgeData = graph.getEdgeAttributes(edge);
+            graph.setEdgeAttribute(edge, 'hidden', !shouldDisplayEdge(graph, edge, selectedNode));
+        });
+        
+        renderer.refresh();
+        // Node click to show details in sidebar
+        const nodeId = event.node;
+        const nodeAttributes = graph.getNodeAttributes(nodeId);
+        const attrs = nodeAttributes.attributes;
+
+        let categoryCountsHtml = '';
+        try {
+            const categoryCountsObj = typeof attrs.categoryCount === 'string' 
+                ? JSON.parse(attrs.categoryCount) 
+                : attrs.categoryCount;
+                
+            if (categoryCountsObj && typeof categoryCountsObj === 'object') {
+                for (const [category, count] of Object.entries(categoryCountsObj)) {
+                    categoryCountsHtml += `<div><span class="info-label">${category}:</span> ${count}</div>`;
+                }
+            } else {
+                categoryCountsHtml = `<div>${attrs.categoryCount || 'N/A'}</div>`;
+            }
+        } catch (e) {
+            categoryCountsHtml = `<div>${attrs.categoryCount || 'N/A'}</div>`;
+        }
+
+        document.getElementById('node-info').innerHTML = `
+            <div class="info-title">${nodeAttributes.label}</div>
+            <div class="info-content">
+                <div><span class="info-label">Type:</span> ${attrs.nodeType || 'Unknown'}</div>
+                <div><span class="info-label">Total Capacity:</span> ${attrs.totalCapacity}</div>
+                <div><span class="info-label">Total Channels:</span> ${attrs.totalChannels}</div>
+                <div><span class="info-label">Channel Segment:</span> ${attrs.channelSegment}</div>
+                <div><span class="info-label">Pleb Rank:</span> ${attrs.plebRank}</div>
+                <div><span class="info-label">Capacity Rank:</span> ${attrs.capacityRank}</div>
+                <div><span class="info-label">Channels Rank:</span> ${attrs.channelsRank}</div>
+                <div><span class="info-label">Public Key:</span> ${attrs.pubKey}</div>
+                <div style="margin-top: 10px;"><span class="info-label">Channel Categories:</span></div>
+                ${categoryCountsHtml}
+            </div>
+        `;
     });
 
     // Set up tooltips
@@ -185,46 +317,6 @@ function createVisualization(data) {
         tooltip.style.left = x + 'px';
         tooltip.style.top = y + 'px';
     }
-
-    // Node click to show details in sidebar
-    renderer.on('clickNode', event => {
-        const nodeId = event.node;
-        const nodeAttributes = graph.getNodeAttributes(nodeId);
-        const attrs = nodeAttributes.attributes;
-
-        let categoryCountsHtml = '';
-        try {
-            const categoryCountsObj = typeof attrs.categoryCount === 'string' 
-                ? JSON.parse(attrs.categoryCount) 
-                : attrs.categoryCount;
-                
-            if (categoryCountsObj && typeof categoryCountsObj === 'object') {
-                for (const [category, count] of Object.entries(categoryCountsObj)) {
-                    categoryCountsHtml += `<div><span class="info-label">${category}:</span> ${count}</div>`;
-                }
-            } else {
-                categoryCountsHtml = `<div>${attrs.categoryCount || 'N/A'}</div>`;
-            }
-        } catch (e) {
-            categoryCountsHtml = `<div>${attrs.categoryCount || 'N/A'}</div>`;
-        }
-
-        document.getElementById('node-info').innerHTML = `
-            <div class="info-title">${nodeAttributes.label}</div>
-            <div class="info-content">
-                <div><span class="info-label">Type:</span> ${attrs.nodeType || 'Unknown'}</div>
-                <div><span class="info-label">Total Capacity:</span> ${attrs.totalCapacity}</div>
-                <div><span class="info-label">Total Channels:</span> ${attrs.totalChannels}</div>
-                <div><span class="info-label">Channel Segment:</span> ${attrs.channelSegment}</div>
-                <div><span class="info-label">Pleb Rank:</span> ${attrs.plebRank}</div>
-                <div><span class="info-label">Capacity Rank:</span> ${attrs.capacityRank}</div>
-                <div><span class="info-label">Channels Rank:</span> ${attrs.channelsRank}</div>
-                <div><span class="info-label">Public Key:</span> ${attrs.pubKey}</div>
-                <div style="margin-top: 10px;"><span class="info-label">Channel Categories:</span></div>
-                ${categoryCountsHtml}
-            </div>
-        `;
-    });
 
     // Edge click to show details in sidebar
     renderer.on('clickEdge', event => {

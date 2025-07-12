@@ -175,3 +175,33 @@ body {
     font-weight: bold;
     margin-bottom: 10px;
 }
+
+/* Add enhanced statistics styling */
+.stats-section {
+    margin-bottom: 15px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+.stats-section:last-child {
+    border-bottom: none;
+}
+
+.stats-subtitle {
+    font-weight: bold;
+    font-size: 0.9em;
+    color: #666;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+#stats div {
+    margin-bottom: 4px;
+    font-size: 0.85em;
+}
+
+#stats .stats-title {
+    font-size: 1em;
+    margin-bottom: 15px;
+}

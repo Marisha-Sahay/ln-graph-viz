@@ -3,100 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lightning Network Graph Visualizations</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <title>Network isualizations</title>
+    
+    <!-- Bitcoin Data Labs styles -->
+    <link rel="stylesheet" href="https://sorukumar.github.io/Bitcoin-Data-Labs/styles/styles.css">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Local styles - contains all styling -->
     <link rel="stylesheet" href="styles.css">
-    <style>
-        .visualization-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            padding: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .visualization-card {
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            padding: 20px;
-            transition: transform 0.2s, box-shadow 0.2s;
-            cursor: pointer;
-            text-decoration: none;
-            color: inherit;
-        }
-        .visualization-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
-        .card-title {
-            font-size: 1.5em;
-            margin-bottom: 10px;
-            color: #333;
-        }
-        .card-description {
-            color: #666;
-            margin-bottom: 15px;
-        }
-        .card-meta {
-            color: #888;
-            font-size: 0.9em;
-        }
-        .header {
-            text-align: center;
-            padding: 40px 20px;
-            background: #f5f5f5;
-            margin-bottom: 20px;
-        }
-        .header h1 {
-            margin: 0;
-            color: #333;
-        }
-        .header p {
-            color: #666;
-            margin: 10px 0 0;
-        }
-    </style>
 </head>
 <body>
-    <div class="header">
-        <h1>Lightning Network Graph Visualizations</h1>
-        <p>Choose a visualization to explore the Lightning Network</p>
+    <!-- Bitcoin Data Labs Header -->
+    <div id="header"></div>
+    
+    <div class="main-content">
+        <div class="page-header">
+            <!-- <h1>LN Graph Visualizations</h1> -->
+            <p>Choose a visualization to explore the Lightning Network</p>
+        </div>
+        
+        <div class="visualization-grid">
+            <a href="serve.html?file=data/gall.json" class="visualization-card">
+                <div class="card-title">Complete Network View</div>
+                <div class="card-description">
+                    View the entire Lightning Network including all node types and channels.
+                    Perfect for getting a comprehensive overview of the network structure.
+                </div>
+                <div class="card-meta">
+                    <i class="fas fa-chart-network"></i> All Nodes and Channels
+                </div>
+            </a>
+
+            <a href="serve.html?file=data/gfree.json" class="visualization-card">
+                <div class="card-title">Freeway Channel Network</div>
+                <div class="card-description">
+                    Focus on high-capacity "freeway" channels in the Lightning Network.
+                    Ideal for analyzing major payment routes and central nodes.
+                </div>
+                <div class="card-meta">
+                    <i class="fas fa-road"></i> Freeway Channels
+                </div>
+            </a>
+
+            <a href="serve.html?file=data/ghigh.json" class="visualization-card">
+                <div class="card-title">Highway Channel Network</div>
+                <div class="card-description">
+                    Visualize the "highway" channel infrastructure of the Lightning Network.
+                    Great for understanding medium to high capacity payment corridors.
+                </div>
+                <div class="card-meta">
+                    <i class="fas fa-highway"></i> Highway Channels
+                </div>
+            </a>
+        </div>
     </div>
     
-    <div class="visualization-grid">
-        <a href="serve.html?file=data/gall.json" class="visualization-card">
-            <div class="card-title">Complete Network View</div>
-            <div class="card-description">
-                View the entire Lightning Network including all node types and channels.
-                Perfect for getting a comprehensive overview of the network structure.
-            </div>
-            <div class="card-meta">
-                <i class="fas fa-chart-network"></i> All Nodes and Channels
-            </div>
-        </a>
+    <!-- Bitcoin Data Labs Footer -->
+    <div id="footer"></div>
 
-        <a href="serve.html?file=data/gfree.json" class="visualization-card">
-            <div class="card-title">Freeway Channel Network</div>
-            <div class="card-description">
-                Focus on high-capacity "freeway" channels in the Lightning Network.
-                Ideal for analyzing major payment routes and central nodes.
-            </div>
-            <div class="card-meta">
-                <i class="fas fa-road"></i> Freeway Channels
-            </div>
-        </a>
-
-        <a href="serve.html?file=data/ghigh.json" class="visualization-card">
-            <div class="card-title">Highway Channel Network</div>
-            <div class="card-description">
-                Visualize the "highway" channel infrastructure of the Lightning Network.
-                Great for understanding medium to high capacity payment corridors.
-            </div>
-            <div class="card-meta">
-                <i class="fas fa-highway"></i> Highway Channels
-            </div>
-        </a>
-    </div>
+    <!-- Bitcoin Data Labs App Components -->
+    <script src="https://sorukumar.github.io/Bitcoin-Data-Labs/components/app-components.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            BitcoinLabsAppComponents.init({
+                isApp: true,
+                appName: "ln-graph-viz",
+                appHomeUrl: "https://sorukumar.github.io/ln-graph-viz/"
+            });
+        });
+    </script>
 </body>
 </html>

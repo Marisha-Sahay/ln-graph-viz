@@ -3,38 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lightning Network Graph Visualization</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <title>Network Visualization</title>
+    
+    <!-- Bitcoin Data Labs styles -->
+    <link rel="stylesheet" href="https://sorukumar.github.io/Bitcoin-Data-Labs/styles/styles.css">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Local styles -->
     <link rel="stylesheet" href="styles.css">
+    
     <!-- Load dependencies in correct order -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/graphology/0.26.0/graphology.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sigma.js/2.4.0/sigma.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/graphology-library/dist/graphology-library.min.js"></script>
     <script src="https://unpkg.com/graphology-layout-forceatlas2@latest/dist/graphology-layout-forceatlas2.min.js"></script>
-    <style>
-        .back-button {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            z-index: 1000;
-            padding: 10px 15px;
-            background: rgba(255, 255, 255, 0.9);
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            text-decoration: none;
-            color: #333;
-            font-weight: bold;
-            transition: background-color 0.2s;
-        }
-        .back-button:hover {
-            background: #f0f0f0;
-        }
-    </style>
 </head>
-<body>
+<body class="visualization-page">
+    <!-- Bitcoin Data Labs Header -->
+    <div id="header"></div>
+    
     <a href="index.html" class="back-button">
         <i class="fas fa-arrow-left"></i> Back to Visualizations
     </a>
+    
     <div id="container">
         <div id="graph-container">
             <div class="tooltip" id="tooltip"></div>
@@ -144,7 +135,10 @@
         </div>
     </div>
 
-    <!-- Load the visualization script with the JSON file name as a parameter -->
+    <!-- Bitcoin Data Labs Footer -->
+    <div id="footer"></div>
+
+    
     <script>
         // Get the JSON filename from URL parameter or use default
         const urlParams = new URLSearchParams(window.location.search);
@@ -158,6 +152,20 @@
             initVisualization(jsonFile);
         };
         document.body.appendChild(script);
+    </script>
+
+        <!-- Bitcoin Data Labs App Components -->
+     <script src="https://sorukumar.github.io/Bitcoin-Data-Labs/components/app-components.js"></script>
+     <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    console.log('Initializing Bitcoin Data Labs components...');
+                    BitcoinLabsAppComponents.init({
+                        isApp: true,
+                        appName: "ln-graph-viz",
+                        appHomeUrl: "https://sorukumar.github.io/ln-graph-viz/"
+                    });
+                    console.log('Bitcoin Data Labs components initialized');
+                });
     </script>
 </body>
 </html>

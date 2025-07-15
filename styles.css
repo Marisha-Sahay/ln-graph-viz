@@ -10,6 +10,7 @@
     --text-secondary: #5F6C7E;
     --surface: #FFFFFF;
     --border: #E5E1DC;
+    --bitcoin-orange: #f7931a;
 }
 
 /* Base styles for all pages */
@@ -279,6 +280,58 @@ body.visualization-page .app-header {
     color: var(--primary);
 }
 
+/* Make layout button prominent - cleaned up version */
+#toggle-layout {
+    background: linear-gradient(135deg, var(--bitcoin-orange), #ff9500);
+    color: white;
+    font-size: 1.1em;
+    font-weight: 600;
+    padding: 14px 24px;
+    border: none;
+    min-width: 160px;
+    box-shadow: 0 4px 16px rgba(247, 147, 26, 0.25);
+}
+
+#toggle-layout:hover {
+    background: linear-gradient(135deg, #ff9500, var(--bitcoin-orange));
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(247, 147, 26, 0.35);
+}
+
+#toggle-layout i {
+    color: white;
+    margin-right: 8px;
+}
+
+/* Subtle hint text for layout button */
+.layout-hint {
+    position: absolute;
+    bottom: 80px;
+    left: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+   font-size: 12px;
+    color: var(--text-secondary);
+    box-shadow: 0 2px 8px rgba(42, 51, 66, 0.08);
+    z-index: 99;
+    opacity: 0.8;
+    animation: fadeInOut 4s ease-in-out infinite;
+    max-width: 200px;
+}
+
+.layout-hint::before {
+    content: "💡";
+    margin-right: 4px;
+}
+
+@keyframes fadeInOut {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 0.4; }
+}
+
+
 .legend {
     position: absolute;
     top: 20px;
@@ -334,25 +387,26 @@ body.visualization-page .app-header {
 
 #stats {
     margin-top: 20px;
-    padding: 16px;
+    padding: 20px;
     background-color: var(--bg-primary);
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 15px;
     border: 1px solid var(--border);
     box-shadow: 0 2px 4px rgba(42, 51, 66, 0.05);
+    line-height: 1.6;
 }
 
 .stats-title {
-    font-weight: 500;
-    margin-bottom: 12px;
+    font-weight: 600;
+    margin-bottom: 18px;
     color: var(--secondary);
-    font-size: 16px;
+    font-size: 1.25em;
 }
 
 .stats-section {
-    margin-bottom: 16px;
+    margin-bottom: 18px;
     border-bottom: 1px solid var(--border);
-    padding-bottom: 12px;
+    padding-bottom: 14px;
 }
 
 .stats-section:last-child {
@@ -361,23 +415,23 @@ body.visualization-page .app-header {
 }
 
 .stats-subtitle {
-    font-weight: 500;
-    font-size: 0.9em;
+    font-weight: 600;
+    font-size: 1.05em;
     color: var(--primary);
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
 #stats div {
-    margin-bottom: 4px;
-    font-size: 0.85em;
+    margin-bottom: 8px;
+    font-size: 1em;
     color: var(--text-primary);
 }
 
 #stats .stats-title {
-    font-size: 1em;
-    margin-bottom: 15px;
+    font-size: 1.25em;
+    margin-bottom: 18px;
 }
 
 /* Mobile responsiveness */

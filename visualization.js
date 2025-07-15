@@ -780,7 +780,7 @@ function createVisualization(data) {
     // Set up all event handlers for user interactions
     setupEventHandlers(renderer, graph, tooltipManager, sidebarManager);
 
-    // Search functionality: filters graph based on node name matching
+    // Search functionality: filters graph based on multiple node fields matching
     const searchInput = document.getElementById('search-input');
     searchInput.addEventListener('input', event => {
         const query = event.target.value.toLowerCase();
@@ -805,13 +805,53 @@ function createVisualization(data) {
             graph.setEdgeAttribute(edge, 'hidden', true);
         });
 
-        // Show matching nodes and their connections
+        // Enhanced search with multiple criteria
+        const searchTerms = query.split(' ').filter(term => term.length > 0);
         const matchingNodes = new Set();
+        const originalMatchingNodes = new Set();
+
         graph.forEachNode(node => {
             const nodeAttributes = graph.getNodeAttributes(node);
-            if (nodeAttributes.label.toLowerCase().includes(query)) {
+            const attrs = nodeAttributes.attributes;
+            
+            // Simple multi-field search - just concatenate available fields
+            const basicSearchableText = [
+                nodeAttributes.label || '',
+                attrs.alias || '',
+                attrs.nodeType || '',
+                attrs.channelSegment || '',
+                attrs.pubKey || ''  // Include full pubkey instead of just first 8 chars
+            ].join(' ').toLowerCase();
+            
+            // Add channel categories from category counts (only if count > 0)
+            let channelTypesText = '';
+            try {
+                const categoryCountsObj = typeof attrs.categoryCount === 'string' 
+                    ? JSON.parse(attrs.categoryCount) 
+                    : attrs.categoryCount;
+                    
+                if (categoryCountsObj && typeof categoryCountsObj === 'object') {
+                    // Only include channel types that have count > 0
+                    const activeChannelTypes = Object.keys(categoryCountsObj)
+                        .filter(channelType => categoryCountsObj[channelType] > 0)
+                        .map(channelType => channelType.toLowerCase());
+                    channelTypesText = activeChannelTypes.join(' ');
+                }
+            } catch (e) {
+                // If parsing fails, continue without channel types
+                channelTypesText = '';
+            }
+            
+            // Combine all searchable text
+            const searchableText = basicSearchableText + ' ' + channelTypesText;
+            
+            // Check if ALL search terms are found (AND logic)
+            const isMatch = searchTerms.every(term => searchableText.includes(term));
+            
+            if (isMatch) {
                 graph.setNodeAttribute(node, 'hidden', false);
                 matchingNodes.add(node);
+                originalMatchingNodes.add(node);
 
                 // Show connected nodes and edges
                 graph.forEachNeighbor(node, neighbor => {
@@ -821,11 +861,14 @@ function createVisualization(data) {
             }
         });
 
-        // Show edges between visible nodes
+        // Show edges ONLY if at least one end is an original matching node
         graph.forEachEdge(edge => {
             const source = graph.source(edge);
             const target = graph.target(edge);
-            if (matchingNodes.has(source) && matchingNodes.has(target)) {
+            
+            // Show edge ONLY if at least one end is an original matching node
+            if ((originalMatchingNodes.has(source) || originalMatchingNodes.has(target)) &&
+                matchingNodes.has(source) && matchingNodes.has(target)) {
                 graph.setEdgeAttribute(edge, 'hidden', false);
             }
         });

@@ -17,6 +17,28 @@ const CAPACITY_THRESHOLDS = {
     UBTC: 1000         // 1 μBTC = 1K satoshis
 };
 
+// Edge coloring configuration for percentile-based datasets (gfree, ghigh)
+const EDGE_COLOR_CONFIG = {
+    // Edge Significance Coloring
+    TOP_2_PERCENT: {
+        color: '#FF0000',      // Red (Very high importance)
+        type: 'line'
+    },
+    TOP_8_PERCENT: {
+        color: '#00BCD4',      // **Cyan/Teal** (Strongly distinct from Red)
+        type: 'line'
+    },
+    BOTTOM_90_PERCENT: {
+        color: '#D8D8D8',      // Very Subtle Grey
+        type: 'line'
+    },
+
+    // Default colors for gall.json (Type-based coloring)
+    FREEWAY: '#FF0000',        // Red, matching TOP_2_PERCENT
+    HIGHWAY: '#00BCD4',        // Cyan/Teal, matching TOP_8_PERCENT
+    MY_WAY: '#D8D8D8'          // Very Subtle Grey, matching BOTTOM_90_PERCENT
+};
+
 // =============================================================================
 // GLOBAL STATE
 // =============================================================================
@@ -302,6 +324,145 @@ function formatCapacity(capacity) {
 }
 
 // =============================================================================
+// EDGE COLORING SYSTEM - Dataset-aware dynamic coloring
+// =============================================================================
+
+/**
+ * Detects the dataset type from the file path or data characteristics
+ * @param {string} jsonFile - Path to the JSON file being loaded
+ * @param {Array} edges - Array of edge data to analyze
+ * @returns {string} Dataset type: 'gall', 'gfree', or 'ghigh'
+ */
+function detectDatasetType(jsonFile, edges) {
+    // First, try to detect from filename
+    const filename = jsonFile.toLowerCase();
+    if (filename.includes('gall')) {
+        console.log('📊 Dataset detected: gall (complete network) - using type-based coloring');
+        return 'gall';
+    }
+    if (filename.includes('gfree')) {
+        console.log('📊 Dataset detected: gfree (Freeway only) - using percentile-based coloring');
+        return 'gfree';
+    }
+    if (filename.includes('ghigh')) {
+        console.log('📊 Dataset detected: ghigh (Highway only) - using percentile-based coloring');
+        return 'ghigh';
+    }
+    
+    // Fallback: analyze edge data to detect if it's a filtered dataset
+    // If all edges have the same Channel_Size_Tier, it's a filtered dataset
+    const channelTypes = new Set(edges.map(e => e.Channel_Size_Tier).filter(Boolean));
+    if (channelTypes.size === 1) {
+        const singleType = Array.from(channelTypes)[0];
+        if (singleType === 'Freeway') {
+            console.log('📊 Dataset detected: Freeway only (from data analysis) - using percentile-based coloring');
+            return 'gfree';
+        }
+        if (singleType === 'Highway') {
+            console.log('📊 Dataset detected: Highway only (from data analysis) - using percentile-based coloring');
+            return 'ghigh';
+        }
+    }
+    
+    // Default to gall (complete network with mixed types)
+    console.log('📊 Dataset detected: complete network (default) - using type-based coloring');
+    return 'gall';
+}
+
+/**
+ * Calculates capacity percentile thresholds for percentile-based coloring
+ * @param {Array} edges - Array of edges with capacity data
+ * @returns {Object} Percentile thresholds { p98, p92 }
+ */
+function calculateCapacityPercentiles(edges) {
+    // Extract and sort capacities
+    const capacities = edges
+        .map(edge => edge.capacity || 0)
+        .filter(capacity => capacity > 0)
+        .sort((a, b) => a - b);
+    
+    if (capacities.length === 0) {
+        return { p98: 0, p92: 0 };
+    }
+    
+    // Calculate percentile indices
+    // Top 2% = 98th percentile and above
+    // Top 8% = 92nd percentile and above
+    const p98Index = Math.max(0, Math.floor(capacities.length * 0.98));
+    const p92Index = Math.max(0, Math.floor(capacities.length * 0.92));
+    
+    const p98Threshold = capacities[p98Index];
+    const p92Threshold = capacities[p92Index];
+    
+    console.log(`📈 Capacity percentiles calculated:
+        - Top 2% (≥${formatCapacity(p98Threshold)}): ${capacities.length - p98Index} channels
+        - Top 2-8% (≥${formatCapacity(p92Threshold)}): ${p98Index - p92Index} channels
+        - Bottom 90% (<${formatCapacity(p92Threshold)}): ${p92Index} channels`);
+    
+    return { p98: p98Threshold, p92: p92Threshold };
+}
+
+/**
+ * Assigns edge color and style based on dataset type and capacity
+ * Single function to handle all edge coloring logic - no duplication
+ * @param {Object} edge - Edge data object with capacity and Channel_Size_Tier
+ * @param {string} datasetType - Type of dataset ('gall', 'gfree', 'ghigh')
+ * @param {Object} percentiles - Percentile thresholds (optional, for gfree/ghigh)
+ * @returns {Object} { color, type } - Color hex and line type ('line' or 'dashed')
+ */
+function getEdgeColorAndStyle(edge, datasetType, percentiles = null) {
+    // For gall.json: use existing Channel_Size_Tier (type-based coloring)
+    if (datasetType === 'gall') {
+        const channelType = edge.Channel_Size_Tier;
+        switch (channelType) {
+            case 'Freeway':
+                return { color: EDGE_COLOR_CONFIG.FREEWAY, type: 'line' };
+            case 'Highway':
+                return { color: EDGE_COLOR_CONFIG.HIGHWAY, type: 'line' };
+            case 'My Way':
+                return { color: EDGE_COLOR_CONFIG.MY_WAY, type: 'line' };
+            default:
+                return { color: '#9E9E9E', type: 'line' };
+        }
+    }
+    
+    // For gfree.json and ghigh.json: use percentile-based coloring
+    if (datasetType === 'gfree' || datasetType === 'ghigh') {
+        if (!percentiles) {
+            console.warn('⚠️ Percentiles not provided for filtered dataset, using default color');
+            return { color: EDGE_COLOR_CONFIG.BOTTOM_90_PERCENT.color, type: 'line' };
+        }
+        
+        const capacity = edge.capacity || 0;
+        
+        // Top 2% (98th percentile and above)
+        if (capacity >= percentiles.p98) {
+            return { 
+                color: EDGE_COLOR_CONFIG.TOP_2_PERCENT.color, 
+                type: EDGE_COLOR_CONFIG.TOP_2_PERCENT.type 
+            };
+        }
+        
+        // Top 2-8% (92nd to 98th percentile)
+        if (capacity >= percentiles.p92) {
+            return { 
+                color: EDGE_COLOR_CONFIG.TOP_8_PERCENT.color, 
+                type: EDGE_COLOR_CONFIG.TOP_8_PERCENT.type 
+            };
+        }
+        
+        // Bottom 90% (below 92nd percentile)
+        return { 
+            color: EDGE_COLOR_CONFIG.BOTTOM_90_PERCENT.color, 
+            type: 'line'  // Use 'line' instead of 'dashed' - Sigma.js doesn't support dashed by default
+        };
+    }
+    
+    // Fallback for unknown dataset types
+    return { color: '#9E9E9E', type: 'line' };
+}
+
+// =============================================================================
 // MAIN FUNCTIONS - Using centralized data processing
 // =============================================================================
 
@@ -325,8 +486,8 @@ async function initVisualization(jsonFile) {
             return response.json();
         })
         .then(data => {
-            // Initialize the visualization with the loaded data
-            createVisualization(data);
+            // Initialize the visualization with the loaded data and filename for dataset detection
+            createVisualization(data, jsonFile);
             console.log('📈 Visualization created');
         })
         .catch(error => {
@@ -732,8 +893,9 @@ function createLayoutManager(graph, renderer, nodes, originalPositions) {
  * Orchestrates: data processing → graph building → rendering → UI setup → event handling
  * This is the main function that coordinates all other components
  * @param {Object} data - Parsed JSON data containing nodes and edges arrays
+ * @param {string} jsonFile - Path to JSON file containing graph data
  */
-function createVisualization(data) {
+function createVisualization(data, jsonFile) {
     // Initialize the graph
     const graph = new graphology.Graph();
     
@@ -747,6 +909,14 @@ function createVisualization(data) {
     // Calculate all statistics once using centralized data processing
     const dataStats = calculateDataStats(nodes, edges);
     const sizeCalculators = createSizeCalculators(dataStats);
+
+    // Detect dataset type and calculate percentiles if needed
+    const datasetType = detectDatasetType(jsonFile, edges);
+    let percentiles = null;
+    
+    if (datasetType === 'gfree' || datasetType === 'ghigh') {
+        percentiles = calculateCapacityPercentiles(edges);
+    }
 
     /**
      * Determines if an edge should be visible based on current filters
@@ -768,19 +938,6 @@ function createVisualization(data) {
             case 'Payment': return '#9C27B0';
             case 'Routing': return '#FF5722';
             default: return '#607D8B';
-        }
-    }
-    
-    /**
-     * Maps Lightning Network channel types to visual colors  
-     * Modify this function to change edge color scheme
-     */
-    function getEdgeColor(channelType) {
-        switch (channelType) {
-            case 'Freeway': return '#E91E63';
-            case 'Highway': return '#3F51B5';
-            case 'My Way': return '#FF9800';  // Note: space in "My Way"
-            default: return '#9E9E9E';
         }
     }
 
@@ -819,17 +976,16 @@ function createVisualization(data) {
         originalPositions.set(node.id, { x: x, y: y });
     });
 
-    // Build graph: Add edges with calculated widths and colors
+    // Build graph: Add edges with dynamic coloring based on dataset type
     edges.forEach(edge => {
         try {
-            // Set edge color based on type if not already set
-            if (!edge.color) {
-                edge.color = getEdgeColor(edge.Channel_Size_Tier);
-            }
+            // Get edge color and style using the new dynamic coloring system
+            const { color, type } = getEdgeColorAndStyle(edge, datasetType, percentiles);
             
             graph.addEdge(edge.source, edge.target, {
                 size: sizeCalculators.edgeWidth(edge.capacity),
-                color: edge.color,
+                color: color,
+                type: type,  // 'line' for solid, 'dashed' for dotted
                 // Store all attributes for display
                 attributes: {
                     id: edge.id,

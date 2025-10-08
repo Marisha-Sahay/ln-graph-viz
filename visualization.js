@@ -24,6 +24,95 @@ const CAPACITY_THRESHOLDS = {
 // Global state for tracking selected node (used for gray-out effect on edges)
 let selectedNode = null;
 
+// Global reference to current renderer instance for proper cleanup
+let currentRenderer = null;
+let currentLayoutManager = null;
+
+// Store event listeners for proper cleanup
+let controlButtonListeners = {
+    zoomIn: null,
+    zoomOut: null,
+    resetView: null,
+    toggleLayout: null
+};
+
+// Store the current search handler to remove it when needed
+let currentSearchHandler = null;
+
+// Track if a dataset is currently being loaded to prevent concurrent loads
+let isLoadingDataset = false;
+
+// =============================================================================
+// CLEANUP FUNCTION
+// =============================================================================
+
+/**
+ * Destroys the current visualization and cleans up all resources
+ * Call this before loading a new dataset to prevent memory leaks and conflicts
+ */
+async function destroyVisualization() {
+    console.log('🧹 Destroying current visualization...');
+    
+    // Stop any running layout
+    if (currentLayoutManager && currentLayoutManager.isRunning) {
+        const toggleBtn = document.getElementById('toggle-layout');
+        if (toggleBtn) {
+            currentLayoutManager.stop(toggleBtn);
+        }
+    }
+    
+    // Clear layout manager reference
+    currentLayoutManager = null;
+    
+    // Destroy the Sigma renderer
+    if (currentRenderer) {
+        try {
+            currentRenderer.kill();
+            console.log('✅ Renderer destroyed');
+        } catch (e) {
+            console.warn('⚠️ Error killing renderer:', e);
+        }
+        currentRenderer = null;
+    }
+    
+    // Remove the canvas element if it exists
+    const graphContainer = document.getElementById('graph-container');
+    const canvases = graphContainer.querySelectorAll('canvas');
+    canvases.forEach(canvas => {
+        canvas.remove();
+        console.log('✅ Canvas removed');
+    });
+    
+    // Reset global state
+    selectedNode = null;
+    
+    // Clear search input
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    
+    // Reset sidebar
+    const nodeInfo = document.getElementById('node-info');
+    const edgeInfo = document.getElementById('edge-info');
+    if (nodeInfo) {
+        nodeInfo.innerHTML = `
+            <div class="info-title">Node Information</div>
+            <div class="info-content">Select a node to see details</div>
+        `;
+    }
+    if (edgeInfo) {
+        edgeInfo.innerHTML = `
+            <div class="info-title">Channel Information</div>
+            <div class="info-content">Select a channel to see details</div>
+        `;
+    }
+    
+    // Wait a moment for everything to clean up
+    await new Promise(resolve => setTimeout(resolve, 100));
+    console.log('✅ Cleanup complete');
+}
+
 // =============================================================================
 // DATA PROCESSING UTILITIES
 // =============================================================================
@@ -147,17 +236,17 @@ function createSizeCalculators(dataStats) {
     
     return {
         nodeSize: (totalChannels) => {
-            if (!totalChannels || !nodeStats.max) return 3;
-            const normalizedValue = (Math.log(Math.max(totalChannels, 1)) - Math.log(Math.max(nodeStats.min, 1))) / 
+            if (!totalChannels || !nodeStats.max) return 2;
+            const normalizedValue = (Math.log(Math.max(totalChannels, 1)) - Math.log(Math.max(nodeStats.min, 1))) /
                                   (Math.log(nodeStats.max) - Math.log(Math.max(nodeStats.min, 1)));
-            return 3 + normalizedValue * (15 - 3);
+            return 2 + normalizedValue * (20 - 2);
         },
         
         edgeWidth: (capacity) => {
-            if (!capacity || !edgeStats.max) return 0.2;
-            const normalizedValue = (Math.log(Math.max(capacity, 1)) - Math.log(Math.max(edgeStats.min, 1))) / 
+            if (!capacity || !edgeStats.max) return 0.1;
+            const normalizedValue = (Math.log(Math.max(capacity, 1)) - Math.log(Math.max(edgeStats.min, 1))) /
                                   (Math.log(edgeStats.max) - Math.log(Math.max(edgeStats.min, 1)));
-            return 0.2 + normalizedValue * (2 - 0.2);
+            return 0.1 + normalizedValue * (2 - 0.1);
         },
         
         edgeStyle: (capacity) => {
@@ -221,10 +310,14 @@ function formatCapacity(capacity) {
  * Entry point: Loads JSON data from server and initializes the visualization
  * Handles network errors and displays error messages to user
  * @param {string} jsonFile - Path to JSON file containing graph data
+ * @returns {Promise} Resolves when visualization is complete
  */
-function initVisualization(jsonFile) {
+async function initVisualization(jsonFile) {
+    // Destroy any existing visualization before creating a new one
+    await destroyVisualization();
+
     // Load the JSON data
-    fetch(jsonFile)
+    return fetch(jsonFile)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`Failed to load ${jsonFile}: ${response.status} ${response.statusText}`);
@@ -234,11 +327,16 @@ function initVisualization(jsonFile) {
         .then(data => {
             // Initialize the visualization with the loaded data
             createVisualization(data);
+            console.log('📈 Visualization created');
         })
         .catch(error => {
             console.error('Error loading JSON data:', error);
-            document.getElementById('graph-container').innerHTML = 
-                `<div style="padding: 20px; color: red;">Error loading data: ${error.message}</div>`;
+            const graphContainer = document.getElementById('graph-container');
+            if (graphContainer) {
+                graphContainer.innerHTML = 
+                    `<div style="padding: 20px; color: red;">Error loading data: ${error.message}</div>`;
+            }
+            throw error; // Re-throw so caller knows it failed
         });
 }
 
@@ -766,8 +864,14 @@ function createVisualization(data) {
         maxEdgeSize: 2
     });
 
+    // Track the current renderer globally for cleanup
+    currentRenderer = renderer;
+
     // Initialize layout management system
     const layoutManager = createLayoutManager(graph, renderer, nodes, originalPositions);
+
+    // Track the current layout manager globally for cleanup
+    currentLayoutManager = layoutManager;
 
     // Apply initial node centering when visualization loads
     layoutManager.initializePositions();
@@ -782,139 +886,170 @@ function createVisualization(data) {
 
     // Search functionality: filters graph based on multiple node fields matching
     const searchInput = document.getElementById('search-input');
-    searchInput.addEventListener('input', event => {
-        const query = event.target.value.toLowerCase();
+    if (searchInput) {
+        searchInput.addEventListener('input', event => {
+            const query = event.target.value.toLowerCase();
 
-        if (query.length < TIMING.SEARCH_MIN_LENGTH) {
-            // Reset all nodes visibility
+            if (query.length < TIMING.SEARCH_MIN_LENGTH) {
+                // Reset all nodes visibility
+                graph.forEachNode(node => {
+                    graph.setNodeAttribute(node, 'hidden', false);
+                });
+                graph.forEachEdge(edge => {
+                    graph.setEdgeAttribute(edge, 'hidden', false);
+                });
+                renderer.refresh();
+                return;
+            }
+
+            // Hide all nodes and edges first
             graph.forEachNode(node => {
-                graph.setNodeAttribute(node, 'hidden', false);
+                graph.setNodeAttribute(node, 'hidden', true);
             });
             graph.forEachEdge(edge => {
-                graph.setEdgeAttribute(edge, 'hidden', false);
+                graph.setEdgeAttribute(edge, 'hidden', true);
             });
-            renderer.refresh();
-            return;
-        }
 
-        // Hide all nodes and edges first
-        graph.forEachNode(node => {
-            graph.setNodeAttribute(node, 'hidden', true);
-        });
-        graph.forEachEdge(edge => {
-            graph.setEdgeAttribute(edge, 'hidden', true);
-        });
+            // Enhanced search with multiple criteria
+            const searchTerms = query.split(' ').filter(term => term.length > 0);
+            const matchingNodes = new Set();
+            const originalMatchingNodes = new Set();
 
-        // Enhanced search with multiple criteria
-        const searchTerms = query.split(' ').filter(term => term.length > 0);
-        const matchingNodes = new Set();
-        const originalMatchingNodes = new Set();
-
-        graph.forEachNode(node => {
-            const nodeAttributes = graph.getNodeAttributes(node);
-            const attrs = nodeAttributes.attributes;
-            
-            // Simple multi-field search - just concatenate available fields
-            const basicSearchableText = [
-                nodeAttributes.label || '',
-                attrs.alias || '',
-                attrs.nodeType || '',
-                attrs.channelSegment || '',
-                attrs.pubKey || ''  // Include full pubkey instead of just first 8 chars
-            ].join(' ').toLowerCase();
-            
-            // Add channel categories from category counts (only if count > 0)
-            let channelTypesText = '';
-            try {
-                const categoryCountsObj = typeof attrs.categoryCount === 'string' 
-                    ? JSON.parse(attrs.categoryCount) 
-                    : attrs.categoryCount;
-                    
-                if (categoryCountsObj && typeof categoryCountsObj === 'object') {
-                    // Only include channel types that have count > 0
-                    const activeChannelTypes = Object.keys(categoryCountsObj)
-                        .filter(channelType => categoryCountsObj[channelType] > 0)
-                        .map(channelType => channelType.toLowerCase());
-                    channelTypesText = activeChannelTypes.join(' ');
+            graph.forEachNode(node => {
+                const nodeAttributes = graph.getNodeAttributes(node);
+                const attrs = nodeAttributes.attributes;
+                
+                // Simple multi-field search - just concatenate available fields
+                const basicSearchableText = [
+                    nodeAttributes.label || '',
+                    attrs.alias || '',
+                    attrs.nodeType || '',
+                    attrs.channelSegment || '',
+                    attrs.pubKey || ''  // Include full pubkey instead of just first 8 chars
+                ].join(' ').toLowerCase();
+                
+                // Add channel categories from category counts (only if count > 0)
+                let channelTypesText = '';
+                try {
+                    const categoryCountsObj = typeof attrs.categoryCount === 'string' 
+                        ? JSON.parse(attrs.categoryCount) 
+                        : attrs.categoryCount;
+                        
+                    if (categoryCountsObj && typeof categoryCountsObj === 'object') {
+                        // Only include channel types that have count > 0
+                        const activeChannelTypes = Object.keys(categoryCountsObj)
+                            .filter(channelType => categoryCountsObj[channelType] > 0)
+                            .map(channelType => channelType.toLowerCase());
+                        channelTypesText = activeChannelTypes.join(' ');
+                    }
+                } catch (e) {
+                    // If parsing fails, continue without channel types
+                    channelTypesText = '';
                 }
-            } catch (e) {
-                // If parsing fails, continue without channel types
-                channelTypesText = '';
-            }
-            
-            // Combine all searchable text
-            const searchableText = basicSearchableText + ' ' + channelTypesText;
-            
-            // Check if ALL search terms are found (AND logic)
-            const isMatch = searchTerms.every(term => searchableText.includes(term));
-            
-            if (isMatch) {
-                graph.setNodeAttribute(node, 'hidden', false);
-                matchingNodes.add(node);
-                originalMatchingNodes.add(node);
+                
+                // Combine all searchable text
+                const searchableText = basicSearchableText + ' ' + channelTypesText;
+                
+                // Check if ALL search terms are found (AND logic)
+                const isMatch = searchTerms.every(term => searchableText.includes(term));
+                
+                if (isMatch) {
+                    graph.setNodeAttribute(node, 'hidden', false);
+                    matchingNodes.add(node);
+                    originalMatchingNodes.add(node);
 
-                // Show connected nodes and edges
-                graph.forEachNeighbor(node, neighbor => {
-                    graph.setNodeAttribute(neighbor, 'hidden', false);
-                    matchingNodes.add(neighbor);
-                });
-            }
+                    // Show connected nodes and edges
+                    graph.forEachNeighbor(node, neighbor => {
+                        graph.setNodeAttribute(neighbor, 'hidden', false);
+                        matchingNodes.add(neighbor);
+                    });
+                }
+            });
+
+            // Show edges ONLY if at least one end is an original matching node
+            graph.forEachEdge(edge => {
+                const source = graph.source(edge);
+                const target = graph.target(edge);
+                
+                // Show edge ONLY if at least one end is an original matching node
+                if ((originalMatchingNodes.has(source) || originalMatchingNodes.has(target)) &&
+                    matchingNodes.has(source) && matchingNodes.has(target)) {
+                    graph.setEdgeAttribute(edge, 'hidden', false);
+                }
+            });
+
+            renderer.refresh();
         });
+    }
 
-        // Show edges ONLY if at least one end is an original matching node
-        graph.forEachEdge(edge => {
-            const source = graph.source(edge);
-            const target = graph.target(edge);
-            
-            // Show edge ONLY if at least one end is an original matching node
-            if ((originalMatchingNodes.has(source) || originalMatchingNodes.has(target)) &&
-                matchingNodes.has(source) && matchingNodes.has(target)) {
-                graph.setEdgeAttribute(edge, 'hidden', false);
-            }
-        });
-
-        renderer.refresh();
-    });
-
-    // Zoom and camera controls setup
-    document.getElementById('zoom-in').addEventListener('click', () => {
-        const camera = renderer.getCamera();
-        camera.animatedZoom({ duration: TIMING.ZOOM_ANIMATION });
-    });
-
-    document.getElementById('zoom-out').addEventListener('click', () => {
-        const camera = renderer.getCamera();
-        camera.animatedUnzoom({ duration: TIMING.ZOOM_ANIMATION });
-    });
-
-    // Reset view functionality: restores original state
-    document.getElementById('reset-view').addEventListener('click', () => {
-        const camera = renderer.getCamera();
-        
-        // Use layout manager for reset
-        layoutManager.reset();
-        
-        // Reset any node/edge filtering
-        selectedNode = null;
-        graph.forEachNode(node => {
-            graph.setNodeAttribute(node, 'hidden', false);
-        });
-        graph.forEachEdge(edge => {
-            graph.setEdgeAttribute(edge, 'hidden', false);
-        });
-        
-        // Clear search input
-        const searchInput = document.getElementById('search-input');
-        if (searchInput) {
-            searchInput.value = '';
+    // Setup control buttons only once
+    if (!controlButtonListeners.zoomIn) {
+        // Zoom and camera controls setup
+        const zoomInBtn = document.getElementById('zoom-in');
+        if (zoomInBtn) {
+            controlButtonListeners.zoomIn = () => {
+                if (currentRenderer) {
+                    const camera = currentRenderer.getCamera();
+                    camera.animatedZoom({ duration: TIMING.ZOOM_ANIMATION });
+                }
+            };
+            zoomInBtn.addEventListener('click', controlButtonListeners.zoomIn);
         }
-        
-        // Reset sidebar information using consolidated manager
-        sidebarManager.reset();
-        
-        camera.animatedReset({ duration: TIMING.ZOOM_ANIMATION });
-        renderer.refresh();
-    });
+
+        const zoomOutBtn = document.getElementById('zoom-out');
+        if (zoomOutBtn) {
+            controlButtonListeners.zoomOut = () => {
+                if (currentRenderer) {
+                    const camera = currentRenderer.getCamera();
+                    camera.animatedUnzoom({ duration: TIMING.ZOOM_ANIMATION });
+                }
+            };
+            zoomOutBtn.addEventListener('click', controlButtonListeners.zoomOut);
+        }
+
+        // Reset view functionality: restores original state
+        const resetViewBtn = document.getElementById('reset-view');
+        if (resetViewBtn) {
+            controlButtonListeners.resetView = () => {
+                if (!currentRenderer || !currentLayoutManager) return;
+                
+                const camera = currentRenderer.getCamera();
+                
+                // Use layout manager for reset
+                currentLayoutManager.reset();
+                
+                // Reset any node/edge filtering
+                selectedNode = null;
+                const graph = currentRenderer.getGraph();
+                graph.forEachNode(node => {
+                    graph.setNodeAttribute(node, 'hidden', false);
+                });
+                graph.forEachEdge(edge => {
+                    graph.setEdgeAttribute(edge, 'hidden', false);
+                });
+                
+                // Clear search input
+                const searchInput = document.getElementById('search-input');
+                if (searchInput) {
+                    searchInput.value = '';
+                }
+                
+                // Reset sidebar information
+                document.getElementById('node-info').innerHTML = `
+                    <div class="info-title">Node Information</div>
+                    <div class="info-content">Select a node to see details</div>
+                `;
+                document.getElementById('edge-info').innerHTML = `
+                    <div class="info-title">Channel Information</div>
+                    <div class="info-content">Select a channel to see details</div>
+                `;
+                
+                camera.animatedReset({ duration: TIMING.ZOOM_ANIMATION });
+                currentRenderer.refresh();
+            };
+            resetViewBtn.addEventListener('click', controlButtonListeners.resetView);
+        }
+    }
 
     // ForceAtlas2 layout integration with availability checking
     const forceAtlas2 = window.graphologyLibrary?.layoutForceAtlas2 || 
@@ -953,13 +1088,14 @@ function createVisualization(data) {
         // Set up layout control button
         const toggleLayoutBtn = document.getElementById('toggle-layout');
         if (toggleLayoutBtn) {
-            toggleLayoutBtn.addEventListener('click', () => {
+            controlButtonListeners.toggleLayout = () => {
                 if (layoutManager.isRunning) {
                     layoutManager.stop(toggleLayoutBtn);
                 } else {
                     layoutManager.start(forceAtlas2, layoutSettings, toggleLayoutBtn);
                 }
-            });
+            };
+            toggleLayoutBtn.addEventListener('click', controlButtonListeners.toggleLayout);
         }
     }
 

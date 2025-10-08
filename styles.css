@@ -1,6 +1,7 @@
 /* Import Bitcoin Data Labs CSS variables */
 :root {
     --primary: #E8916B;
+    --primary-dark: #d67e54;
     --secondary: #2A3342;
     --accent-cool: #8BBEDC;
     --accent-warm: #F4C2A1;
@@ -280,22 +281,29 @@ body.visualization-page .app-header {
     color: var(--primary);
 }
 
-/* Make layout button prominent - cleaned up version */
+/* Make layout button match Load Dataset button style */
 #toggle-layout {
-    background: linear-gradient(135deg, var(--bitcoin-orange), #ff9500);
+    background: var(--primary);
     color: white;
-    font-size: 1.1em;
-    font-weight: 600;
-    padding: 14px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 16px;
     border: none;
+    border-radius: 6px;
     min-width: 160px;
-    box-shadow: 0 4px 16px rgba(247, 147, 26, 0.25);
+    box-shadow: 0 2px 8px rgba(232, 145, 107, 0.3);
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s ease;
 }
 
 #toggle-layout:hover {
-    background: linear-gradient(135deg, #ff9500, var(--bitcoin-orange));
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(247, 147, 26, 0.35);
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(232, 145, 107, 0.3);
 }
 
 #toggle-layout i {
@@ -330,7 +338,6 @@ body.visualization-page .app-header {
     0%, 100% { opacity: 0.8; }
     50% { opacity: 0.4; }
 }
-
 
 .legend {
     position: absolute;
@@ -377,6 +384,11 @@ body.visualization-page .app-header {
     font-size: 18px;
     color: var(--secondary);
     font-weight: 500;
+}
+
+.header h1 i {
+    color: var(--primary);
+    margin-right: 8px;
 }
 
 .header p {
@@ -432,6 +444,76 @@ body.visualization-page .app-header {
 #stats .stats-title {
     font-size: 1.25em;
     margin-bottom: 18px;
+}
+
+/* Dataset Switcher Component */
+.dataset-switcher {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.dataset-switcher label {
+    display: block;
+    font-weight: 500;
+    color: var(--secondary);
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.dataset-switcher label i {
+    color: var(--primary);
+    margin-right: 6px;
+}
+
+.dataset-switcher select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background-color: var(--surface);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    margin-bottom: 10px;
+    transition: border-color 0.2s ease;
+}
+
+.dataset-switcher select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(232, 145, 107, 0.1);
+}
+
+.dataset-switcher button {
+    width: 100%;
+    padding: 10px 16px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.dataset-switcher button:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(232, 145, 107, 0.3);
+}
+
+.dataset-switcher button i {
+    font-size: 13px;
 }
 
 /* Mobile responsiveness */

@@ -3,61 +3,160 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network isualizations</title>
+    <title>Lightning Graph Viz – Interactive Network Visualization</title>
     
     <!-- Bitcoin Data Labs styles -->
     <link rel="stylesheet" href="https://sorukumar.github.io/Bitcoin-Data-Labs/styles/styles.css">
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <!-- Local styles - contains all styling -->
+    <!-- Local styles -->
     <link rel="stylesheet" href="styles.css">
+    
+    <!-- Load dependencies in correct order -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/graphology/0.26.0/graphology.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sigma.js/2.4.0/sigma.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/graphology-library/dist/graphology-library.min.js"></script>
+    <script src="https://unpkg.com/graphology-layout-forceatlas2@latest/dist/graphology-layout-forceatlas2.min.js"></script>
 </head>
-<body>
+<body class="visualization-page">
     <!-- Bitcoin Data Labs Header -->
     <div id="header"></div>
     
-    <div class="main-content">
-        <div class="page-header">
-            <!-- <h1>LN Graph Visualizations</h1> -->
-            <p>Choose a visualization to explore the Lightning Network</p>
+    <div id="container">
+        <div id="graph-container">
+            <!-- Loading indicator -->
+            <div id="loading-indicator" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--surface); padding: 24px 32px; border-radius: 12px; box-shadow: 0 4px 16px rgba(42, 51, 66, 0.15); z-index: 2000; text-align: center;">
+                <i class="fas fa-spinner fa-spin" style="font-size: 32px; color: var(--primary); margin-bottom: 12px;"></i>
+                <div style="color: var(--text-primary); font-weight: 500;">Loading dataset...</div>
+            </div>
+            
+            <div class="tooltip" id="tooltip"></div>
+            <div class="controls">
+                <button class="control-btn" id="zoom-in"><i class="fas fa-search-plus"></i> Zoom In</button>
+                <button class="control-btn" id="zoom-out"><i class="fas fa-search-minus"></i> Zoom Out</button>
+                <button class="control-btn" id="reset-view"><i class="fas fa-sync-alt"></i> Reset</button>
+                <button class="control-btn" id="toggle-layout"><i class="fas fa-play"></i> Start Layout</button>
+            </div>
+            <div class="layout-hint" id="layout-hint">
+                Click "Start Layout" multiple times to see patterns emerge
+            </div>
+            <div class="legend">
+                <div class="legend-title" style="font-weight: bold; margin-bottom: 10px;">Node Types</div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #4CAF50;"></div>
+                    <div class="legend-text">LSP</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #2196F3;"></div>
+                    <div class="legend-text">Exchange</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #FFC107;"></div>
+                    <div class="legend-text">Wallet</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #9C27B0;"></div>
+                    <div class="legend-text">Payment</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #FF5722;"></div>
+                    <div class="legend-text">Routing</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #607D8B;"></div>
+                    <div class="legend-text">Other</div>
+                </div>
+                <div class="legend-title" style="font-weight: bold; margin: 15px 0 10px;">Channel Types</div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #E91E63;"></div>
+                    <div class="legend-text">Freeway</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #3F51B5;"></div>
+                    <div class="legend-text">Highway</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #FF9800;"></div>
+                    <div class="legend-text">My Way</div>
+                </div>
+            </div>
         </div>
-        
-        <div class="visualization-grid">
-            <a href="serve.html?file=data/gall.json" class="visualization-card">
-                <div class="card-title">Complete Network View</div>
-                <div class="card-description">
-                    View the entire Lightning Network including all node types and channels.
-                    Perfect for getting a comprehensive overview of the network structure.
+        <div id="sidebar">
+            <div class="header">
+                <h1><i class="fas fa-project-diagram"></i> Lightning Graph Viz</h1>
+                <p>Interactive visualization of the Lightning Network</p>
+            </div>
+            
+            <!-- Dataset Switcher -->
+            <div class="dataset-switcher">
+                <label for="dataset-select">
+                    <i class="fas fa-database"></i>
+                    Select Dataset
+                </label>
+                <select id="dataset-select">
+                    <option value="data/gall.json">Complete Network</option>
+                    <option value="data/gfree.json" selected>Freeway</option>
+                    <option value="data/ghigh.json">Highway</option>
+                </select>
+                <button id="load-dataset-btn">
+                    <i class="fas fa-sync-alt"></i> Load Dataset
+                </button>
+            </div>
+            
+            <div id="search-container">
+                <input type="text" id="search-input" placeholder="Search nodes by name...">
+            </div>
+            <div id="node-info">
+                <div class="info-title">Node Information</div>
+                <div class="info-content">Select a node to see details</div>
+            </div>
+            <div id="edge-info">
+                <div class="info-title">Channel Information</div>
+                <div class="info-content">Select a channel to see details</div>
+            </div>
+            <div id="stats">
+                <div class="stats-title">Network Statistics</div>
+                
+                <div class="stats-section">
+                    <div class="stats-subtitle">Network Overview</div>
+                    <div>Nodes: <span id="node-count">0</span></div>
+                    <div>Channels: <span id="edge-count">0</span></div>
+                    <div>Total Capacity: <span id="total-capacity">0</span></div>
                 </div>
-                <div class="card-meta">
-                    <i class="fas fa-chart-network"></i> All Nodes and Channels
+                
+                <div class="stats-section">
+                    <div class="stats-subtitle">Channel Size Distribution</div>
+                    <div>Min: <span id="capacity-min">0</span></div>
+                    <div>25%: <span id="capacity-q25">0</span></div>
+                    <div>50% (Median): <span id="capacity-median">0</span></div>
+                    <div>75%: <span id="capacity-q75">0</span></div>
+                    <div>Max: <span id="capacity-max">0</span></div>
+                    <div>Average: <span id="capacity-avg">0</span></div>
                 </div>
-            </a>
-
-            <a href="serve.html?file=data/gfree.json" class="visualization-card">
-                <div class="card-title">Freeway Channel Network</div>
-                <div class="card-description">
-                    Focus on high-capacity "freeway" channels in the Lightning Network.
-                    Ideal for analyzing major payment routes and central nodes.
+                
+                <div class="stats-section">
+                    <div class="stats-subtitle">Node Channel # Distribution</div>
+                    <div>Min Channels: <span id="channels-min">0</span></div>
+                    <div>25%: <span id="channels-q25">0</span></div>
+                    <div>50% (Median): <span id="channels-median">0</span></div>
+                    <div>75%: <span id="channels-q75">0</span></div>
+                    <div>Max Channels: <span id="channels-max">0</span></div>
+                    <div>Average: <span id="channels-avg">0</span></div>
                 </div>
-                <div class="card-meta">
-                    <i class="fas fa-road"></i> Freeway Channels
+                
+                <div class="stats-section">
+                    <div class="stats-subtitle">Node Capacity Distribution</div>
+                    <div>Min Capacity: <span id="node-capacity-min">0</span></div>
+                    <div>25%: <span id="node-capacity-q25">0</span></div>
+                    <div>50% (Median): <span id="node-capacity-median">0</span></div>
+                    <div>75%: <span id="node-capacity-q75">0</span></div>
+                    <div>Max Capacity: <span id="node-capacity-max">0</span></div>
+                    <div>Average: <span id="node-capacity-avg">0</span></div>
                 </div>
-            </a>
-
-            <a href="serve.html?file=data/ghigh.json" class="visualization-card">
-                <div class="card-title">Highway Channel Network</div>
-                <div class="card-description">
-                    Visualize the "highway" channel infrastructure of the Lightning Network.
-                    Great for understanding medium to high capacity payment corridors.
-                </div>
-                <div class="card-meta">
-                    <i class="fas fa-highway"></i> Highway Channels
-                </div>
-            </a>
+            </div>
         </div>
     </div>
-    
+
     <!-- Bitcoin Data Labs Footer -->
     <div id="footer"></div>
 
@@ -69,6 +168,108 @@
                 isApp: true,
                 appName: "ln-graph-viz",
                 appHomeUrl: "https://sorukumar.github.io/ln-graph-viz/"
+            });
+        });
+    </script>
+
+    <!-- Load visualization.js -->
+    <script src="visualization.js"></script>
+    
+    <script>
+        // Dataset configuration
+        const DATASETS = {
+            'data/gall.json': 'Complete Network',
+            'data/gfree.json': 'Freeway',
+            'data/ghigh.json': 'Highway'
+        };
+
+        // Get initial dataset from URL parameter or use default
+        function getInitialDataset() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const fileParam = urlParams.get('file');
+            
+            // If URL has a valid file parameter, use it
+            if (fileParam && DATASETS[fileParam]) {
+                return fileParam;
+            }
+            
+            // Default to Freeway
+            return 'data/gfree.json';
+        }
+
+        // Update URL using History API (no page reload)
+        function updateURL(datasetPath) {
+            const url = new URL(window.location);
+            url.searchParams.set('file', datasetPath);
+            window.history.pushState({ dataset: datasetPath }, '', url);
+        }
+
+        // Show loading indicator
+        function showLoading() {
+            document.getElementById('loading-indicator').style.display = 'block';
+        }
+
+        // Hide loading indicator
+        function hideLoading() {
+            document.getElementById('loading-indicator').style.display = 'none';
+        }
+
+        // Load and display a dataset
+        async function loadDataset(datasetPath) {
+            // Prevent concurrent dataset loads
+            if (window.isLoadingDataset) {
+                console.log('⏳ Already loading a dataset, please wait...');
+                return;
+            }
+            
+            window.isLoadingDataset = true;
+            showLoading();
+            
+            try {
+                console.log(`📊 Loading dataset: ${datasetPath}`);
+                
+                // Destroy any existing visualization first
+                if (typeof destroyVisualization === 'function') {
+                    await destroyVisualization();
+                }
+                
+                // Wait a moment to ensure cleanup is complete
+                await new Promise(resolve => setTimeout(resolve, 150));
+                
+                // Load the new dataset
+                await initVisualization(datasetPath);
+                
+                // Update URL
+                updateURL(datasetPath);
+                
+                console.log('✅ Dataset loaded successfully');
+                
+            } catch (error) {
+                console.error('❌ Error loading dataset:', error);
+                alert(`Failed to load dataset: ${error.message}`);
+            } finally {
+                window.isLoadingDataset = false;
+                hideLoading();
+            }
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const initialDataset = getInitialDataset();
+            
+            // Set the dropdown to match the initial dataset
+            const datasetSelect = document.getElementById('dataset-select');
+            datasetSelect.value = initialDataset;
+            
+            // Load the initial dataset
+            loadDataset(initialDataset);
+            
+            // Set up load dataset button to reload page with new parameter (SIMPLE & RELIABLE)
+            const loadDatasetBtn = document.getElementById('load-dataset-btn');
+            loadDatasetBtn.addEventListener('click', () => {
+                const selectedDataset = datasetSelect.value;
+                // Simply reload the page with the new dataset parameter
+                window.location.href = `?file=${selectedDataset}`;
             });
         });
     </script>

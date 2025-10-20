@@ -17,26 +17,43 @@ const CAPACITY_THRESHOLDS = {
     UBTC: 1000         // 1 μBTC = 1K satoshis
 };
 
-// Edge coloring configuration for percentile-based datasets (gfree, ghigh)
-const EDGE_COLOR_CONFIG = {
-    // Edge Significance Coloring
-    TOP_2_PERCENT: {
-        color: '#FF0000',      // Red (Very high importance)
-        type: 'line'
-    },
-    TOP_8_PERCENT: {
-        color: '#00BCD4',      // **Cyan/Teal** (Strongly distinct from Red)
-        type: 'line'
-    },
-    BOTTOM_90_PERCENT: {
-        color: '#D8D8D8',      // Very Subtle Grey
-        type: 'line'
-    },
+// Cluster color palette for network communities
+const CLUSTER_COLORS = {
+    0: '#FF6B6B',   // Red
+    1: '#4ECDC4',   // Teal
+    2: '#45B7D1',   // Blue
+    3: '#FFA07A',   // Light Salmon
+    4: '#98D8C8',   // Mint
+    5: '#F7DC6F',   // Yellow
+    6: '#BB8FCE',   // Purple
+    7: '#85C1E2',   // Sky Blue
+    8: '#F8B739',   // Orange
+    9: '#52B788',   // Green
+    10: '#E07A5F',  // Terra Cotta
+    11: '#3D5A80',  // Navy
+    12: '#81B29A',  // Sage
+    13: '#F2CC8F',  // Sand
+    14: '#D62828',  // Crimson
+    DEFAULT: '#607D8B'  // Gray for unknown
+};
 
-    // Default colors for gall.json (Type-based coloring)
-    FREEWAY: '#FF0000',        // Red, matching TOP_2_PERCENT
-    HIGHWAY: '#00BCD4',        // Cyan/Teal, matching TOP_8_PERCENT
-    MY_WAY: '#D8D8D8'          // Very Subtle Grey, matching BOTTOM_90_PERCENT
+// Bridge node highlighting
+const BRIDGE_NODE_CONFIG = {
+    IMPORTANT_BRIDGE: {
+        borderColor: '#FF0000',
+        borderWidth: 3
+    },
+    REGULAR_BRIDGE: {
+        borderColor: '#FFA500',
+        borderWidth: 2
+    }
+};
+
+// Edge coloring - using pre-calculated colors from data
+const EDGE_HIGHLIGHT = {
+    IMPORTANT_BRIDGE: '#FF0000',  // Red for critical bridges
+    REGULAR_BRIDGE: '#FFA500',    // Orange for regular bridges
+    DEFAULT: '#D8D8D8'            // Light gray for normal edges
 };
 
 // =============================================================================
@@ -141,7 +158,7 @@ async function destroyVisualization() {
 
 /**
  * Calculates comprehensive statistics including percentiles for capacity and channels
- * This function processes all nodes and edges once to determine scaling ranges and distributions
+ * Works with the new enhanced data format (snake_case fields)
  * @param {Array} nodes - Array of Lightning Network nodes
  * @param {Array} edges - Array of Lightning Network channels
  * @returns {Object} Enhanced statistics object with min/max values, percentiles, and total capacity
@@ -185,26 +202,33 @@ function calculateDataStats(nodes, edges) {
     
     // 2. Node channel count distribution
     const nodeChannels = nodes
-        .map(node => node.Total_Channels || 0)
+        .map(node => node.total_channels || 0)
         .filter(channels => channels > 0)
         .sort((a, b) => a - b);
     
     const channelStats = calculatePercentiles(nodeChannels);
     
-    // 3. Node capacity distribution (use existing calculated values)
+    // 3. Node capacity distribution
     const nodeCapacities = nodes
-        .map(node => node.Total_Capacity || 0)
+        .map(node => node.total_capacity || 0)
         .filter(capacity => capacity > 0)
         .sort((a, b) => a - b);
     
     const nodeCapacityStats = calculatePercentiles(nodeCapacities);
     
-    // Calculate total capacity from node totals 
-    const totalCapacity = nodeCapacities.reduce((sum, capacity) => sum + capacity, 0)/2;
+    // 4. Node betweenness distribution
+    const nodeBetweenness = nodes
+        .map(node => node.node_betweenness || 0)
+        .filter(betweenness => betweenness > 0)
+        .sort((a, b) => a - b);
     
-    // Return enhanced statistics object with backward compatibility
+    const betweennessStats = calculatePercentiles(nodeBetweenness);
+    
+    // Calculate total capacity from node totals 
+    const totalCapacity = nodeCapacities.reduce((sum, capacity) => sum + capacity, 0) / 2;
+    
+    // Return enhanced statistics object
     return {
-        // Original structure for backward compatibility (used by existing scaling functions)
         nodes: { 
             min: channelStats.min || 1, 
             max: channelStats.max || 1 
@@ -214,8 +238,6 @@ function calculateDataStats(nodes, edges) {
             max: channelSizeStats.max || 1 
         },
         totalCapacity: totalCapacity,
-        
-        // Enhanced statistics - renamed for clarity
         channelSize: {
             min: channelSizeStats.min,
             q25: channelSizeStats.q25,
@@ -234,7 +256,6 @@ function calculateDataStats(nodes, edges) {
             avg: channelStats.avg,
             count: nodeChannels.length
         },
-        // Node capacity distribution from existing data
         nodeCapacity: {
             min: nodeCapacityStats.min,
             q25: nodeCapacityStats.q25,
@@ -243,39 +264,50 @@ function calculateDataStats(nodes, edges) {
             max: nodeCapacityStats.max,
             avg: nodeCapacityStats.avg,
             count: nodeCapacities.length
+        },
+        betweenness: {
+            min: betweennessStats.min,
+            q25: betweennessStats.q25,
+            median: betweennessStats.median,
+            q75: betweennessStats.q75,
+            max: betweennessStats.max,
+            avg: betweennessStats.avg,
+            count: nodeBetweenness.length
         }
     };
 }
 
 /**
  * Creates reusable calculators for consistent node/edge sizing across the graph
- * Uses logarithmic scaling to handle wide range of values (channels: 1-2000+, capacity: 1K-1B+ sats)
+ * Node size based on channel count (more intuitive for Lightning Network)
+ * Edge width based on channel capacity
+ * Uses logarithmic scaling to handle wide range of values
+ * Optimized for large graphs (40k+ edges) following Sigma.js demo best practices
  * @param {Object} dataStats - Pre-calculated statistics from calculateDataStats
- * @returns {Object} Calculator functions for nodeSize, edgeWidth, and edgeStyle
+ * @returns {Object} Calculator functions for nodeSize and edgeWidth
  */
 function createSizeCalculators(dataStats) {
     const { nodes: nodeStats, edges: edgeStats } = dataStats;
     
+    // Sigma.js demo sizing for large graphs with 40k+ edges
+    const NODE_SIZE_RANGE = { min: 2, max: 20 };      // Nodes: 2-10px (smaller for dense graphs)
+    const EDGE_WIDTH_RANGE = { min: 0.1, max: 2 };    // Edges: 0.5-2px (thin for visual clarity)
+    
     return {
         nodeSize: (totalChannels) => {
-            if (!totalChannels || !nodeStats.max) return 2;
+            // Use channel count for sizing - more intuitive for Lightning Network
+            if (!totalChannels || !nodeStats.max) return NODE_SIZE_RANGE.min;
             const normalizedValue = (Math.log(Math.max(totalChannels, 1)) - Math.log(Math.max(nodeStats.min, 1))) /
                                   (Math.log(nodeStats.max) - Math.log(Math.max(nodeStats.min, 1)));
-            return 2 + normalizedValue * (20 - 2);
+            return NODE_SIZE_RANGE.min + normalizedValue * (NODE_SIZE_RANGE.max - NODE_SIZE_RANGE.min);
         },
         
         edgeWidth: (capacity) => {
-            if (!capacity || !edgeStats.max) return 0.1;
+            // Use capacity-based sizing for channels
+            if (!capacity || !edgeStats.max) return EDGE_WIDTH_RANGE.min;
             const normalizedValue = (Math.log(Math.max(capacity, 1)) - Math.log(Math.max(edgeStats.min, 1))) /
                                   (Math.log(edgeStats.max) - Math.log(Math.max(edgeStats.min, 1)));
-            return 0.1 + normalizedValue * (2 - 0.1);
-        },
-        
-        edgeStyle: (capacity) => {
-            if (!capacity || !edgeStats.max) return { type: "dashed" };
-            const range = edgeStats.max - edgeStats.min;
-            const normalizedCapacity = (capacity - edgeStats.min) / range;
-            return normalizedCapacity <= 0.5 ? { type: "dashed" } : { type: "line" };
+            return EDGE_WIDTH_RANGE.min + normalizedValue * (EDGE_WIDTH_RANGE.max - EDGE_WIDTH_RANGE.min);
         }
     };
 }
@@ -324,149 +356,49 @@ function formatCapacity(capacity) {
 }
 
 // =============================================================================
-// EDGE COLORING SYSTEM - Dataset-aware dynamic coloring
+// EDGE COLORING SYSTEM
 // =============================================================================
 
 /**
- * Detects the dataset type from the file path or data characteristics
- * @param {string} jsonFile - Path to the JSON file being loaded
- * @param {Array} edges - Array of edge data to analyze
- * @returns {string} Dataset type: 'gall', 'gfree', or 'ghigh'
+ * Gets edge color based on enhanced data attributes
+ * Uses pre-calculated colors from data when available
+ * @param {Object} edge - Edge data object
+ * @returns {string} Color hex code
  */
-function detectDatasetType(jsonFile, edges) {
-    // First, try to detect from filename
-    const filename = jsonFile.toLowerCase();
-    if (filename.includes('gall')) {
-        console.log('📊 Dataset detected: gall (complete network) - using type-based coloring');
-        return 'gall';
-    }
-    if (filename.includes('gfree')) {
-        console.log('📊 Dataset detected: gfree (Freeway only) - using percentile-based coloring');
-        return 'gfree';
-    }
-    if (filename.includes('ghigh')) {
-        console.log('📊 Dataset detected: ghigh (Highway only) - using percentile-based coloring');
-        return 'ghigh';
+function getEdgeColor(edge) {
+    // Highlight important bridge channels
+    if (edge.is_important_bridge_channel) {
+        return EDGE_HIGHLIGHT.IMPORTANT_BRIDGE;
     }
     
-    // Fallback: analyze edge data to detect if it's a filtered dataset
-    // If all edges have the same Channel_Size_Tier, it's a filtered dataset
-    const channelTypes = new Set(edges.map(e => e.Channel_Size_Tier).filter(Boolean));
-    if (channelTypes.size === 1) {
-        const singleType = Array.from(channelTypes)[0];
-        if (singleType === 'Freeway') {
-            console.log('📊 Dataset detected: Freeway only (from data analysis) - using percentile-based coloring');
-            return 'gfree';
-        }
-        if (singleType === 'Highway') {
-            console.log('📊 Dataset detected: Highway only (from data analysis) - using percentile-based coloring');
-            return 'ghigh';
-        }
+    // Highlight regular bridge channels
+    if (edge.is_bridge_channel) {
+        return EDGE_HIGHLIGHT.REGULAR_BRIDGE;
     }
     
-    // Default to gall (complete network with mixed types)
-    console.log('📊 Dataset detected: complete network (default) - using type-based coloring');
-    return 'gall';
+    // Default color
+    return EDGE_HIGHLIGHT.DEFAULT;
 }
 
 /**
- * Calculates capacity percentile thresholds for percentile-based coloring
- * @param {Array} edges - Array of edges with capacity data
- * @returns {Object} Percentile thresholds { p98, p92 }
+ * Gets node color based on cluster or pre-calculated color
+ * @param {Object} node - Node data object
+ * @returns {string} Color hex code
  */
-function calculateCapacityPercentiles(edges) {
-    // Extract and sort capacities
-    const capacities = edges
-        .map(edge => edge.capacity || 0)
-        .filter(capacity => capacity > 0)
-        .sort((a, b) => a - b);
-    
-    if (capacities.length === 0) {
-        return { p98: 0, p92: 0 };
+function getNodeColor(node) {
+    // Use cluster-based coloring
+    if (node.cluster !== undefined && node.cluster !== null) {
+        return CLUSTER_COLORS[node.cluster] || CLUSTER_COLORS.DEFAULT;
     }
     
-    // Calculate percentile indices
-    // Top 2% = 98th percentile and above
-    // Top 8% = 92nd percentile and above
-    const p98Index = Math.max(0, Math.floor(capacities.length * 0.98));
-    const p92Index = Math.max(0, Math.floor(capacities.length * 0.92));
-    
-    const p98Threshold = capacities[p98Index];
-    const p92Threshold = capacities[p92Index];
-    
-    console.log(`📈 Capacity percentiles calculated:
-        - Top 2% (≥${formatCapacity(p98Threshold)}): ${capacities.length - p98Index} channels
-        - Top 2-8% (≥${formatCapacity(p92Threshold)}): ${p98Index - p92Index} channels
-        - Bottom 90% (<${formatCapacity(p92Threshold)}): ${p92Index} channels`);
-    
-    return { p98: p98Threshold, p92: p92Threshold };
-}
-
-/**
- * Assigns edge color and style based on dataset type and capacity
- * Single function to handle all edge coloring logic - no duplication
- * @param {Object} edge - Edge data object with capacity and Channel_Size_Tier
- * @param {string} datasetType - Type of dataset ('gall', 'gfree', 'ghigh')
- * @param {Object} percentiles - Percentile thresholds (optional, for gfree/ghigh)
- * @returns {Object} { color, type } - Color hex and line type ('line' or 'dashed')
- */
-function getEdgeColorAndStyle(edge, datasetType, percentiles = null) {
-    // For gall.json: use existing Channel_Size_Tier (type-based coloring)
-    if (datasetType === 'gall') {
-        const channelType = edge.Channel_Size_Tier;
-        switch (channelType) {
-            case 'Freeway':
-                return { color: EDGE_COLOR_CONFIG.FREEWAY, type: 'line' };
-            case 'Highway':
-                return { color: EDGE_COLOR_CONFIG.HIGHWAY, type: 'line' };
-            case 'My Way':
-                return { color: EDGE_COLOR_CONFIG.MY_WAY, type: 'line' };
-            default:
-                return { color: '#9E9E9E', type: 'line' };
-        }
-    }
-    
-    // For gfree.json and ghigh.json: use percentile-based coloring
-    if (datasetType === 'gfree' || datasetType === 'ghigh') {
-        if (!percentiles) {
-            console.warn('⚠️ Percentiles not provided for filtered dataset, using default color');
-            return { color: EDGE_COLOR_CONFIG.BOTTOM_90_PERCENT.color, type: 'line' };
-        }
-        
-        const capacity = edge.capacity || 0;
-        
-        // Top 2% (98th percentile and above)
-        if (capacity >= percentiles.p98) {
-            return { 
-                color: EDGE_COLOR_CONFIG.TOP_2_PERCENT.color, 
-                type: EDGE_COLOR_CONFIG.TOP_2_PERCENT.type 
-            };
-        }
-        
-        // Top 2-8% (92nd to 98th percentile)
-        if (capacity >= percentiles.p92) {
-            return { 
-                color: EDGE_COLOR_CONFIG.TOP_8_PERCENT.color, 
-                type: EDGE_COLOR_CONFIG.TOP_8_PERCENT.type 
-            };
-        }
-        
-        // Bottom 90% (below 92nd percentile)
-        return { 
-            color: EDGE_COLOR_CONFIG.BOTTOM_90_PERCENT.color, 
-            type: 'line'  // Use 'line' instead of 'dashed' - Sigma.js doesn't support dashed by default
-        };
-    }
-    
-    // Fallback for unknown dataset types
-    return { color: '#9E9E9E', type: 'line' };
+    // Default color
+    return CLUSTER_COLORS.DEFAULT;
 }
 
 // =============================================================================
-// MAIN FUNCTIONS - Using centralized data processing
+// MAIN FUNCTIONS
 // =============================================================================
 
-// Main visualization function that loads JSON data and initializes the graph
 /**
  * Entry point: Loads JSON data from server and initializes the visualization
  * Handles network errors and displays error messages to user
@@ -486,7 +418,7 @@ async function initVisualization(jsonFile) {
             return response.json();
         })
         .then(data => {
-            // Initialize the visualization with the loaded data and filename for dataset detection
+            // Initialize the visualization with the loaded data
             createVisualization(data, jsonFile);
             console.log('📈 Visualization created');
         })
@@ -497,26 +429,23 @@ async function initVisualization(jsonFile) {
                 graphContainer.innerHTML = 
                     `<div style="padding: 20px; color: red;">Error loading data: ${error.message}</div>`;
             }
-            throw error; // Re-throw so caller knows it failed
+            throw error;
         });
 }
 
 // =============================================================================
-// PHASE 3: Event Handler Consolidation - Eliminate duplicate event patterns
+// TOOLTIP AND SIDEBAR MANAGEMENT
 // =============================================================================
 
 /**
  * Manages tooltip display and positioning for node/edge hover effects
- * Handles showing, hiding, positioning, and content generation for tooltips
+ * Shows enhanced network analysis metrics
  * @param {HTMLElement} tooltipElement - DOM element for tooltip display
- * @returns {Object} API for tooltip operations (show, hide, position, create content)
+ * @returns {Object} API for tooltip operations
  */
 function createTooltipManager(tooltipElement) {
     let currentHover = null;
     
-    /**
-     * Shows tooltip with specified content at mouse position
-     */
     function show(content, event) {
         currentHover = true;
         tooltipElement.innerHTML = content;
@@ -524,17 +453,11 @@ function createTooltipManager(tooltipElement) {
         position(event);
     }
     
-    /**
-     * Hides tooltip and resets hover state
-     */
     function hide() {
         currentHover = null;
         tooltipElement.style.display = 'none';
     }
     
-    /**
-     * Positions tooltip relative to mouse cursor with offset
-     */
     function position(event) {
         const x = event.x + TIMING.TOOLTIP_OFFSET;
         const y = event.y + TIMING.TOOLTIP_OFFSET;
@@ -542,31 +465,43 @@ function createTooltipManager(tooltipElement) {
         tooltipElement.style.top = y + 'px';
     }
     
-    /**
-     * Generates HTML content for node hover tooltips
-     * Shows: node name, type, capacity, channel count
-     */
     function createNodeTooltip(nodeAttributes) {
         const attrs = nodeAttributes.attributes;
+        let bridgeInfo = '';
+        
+        if (attrs.isImportantBridgeNode) {
+            bridgeInfo = '<div style="color: #FF0000; font-weight: bold;">🌉 Critical Bridge Node</div>';
+        } else if (attrs.isBridgeNode) {
+            bridgeInfo = '<div style="color: #FFA500; font-weight: bold;">🌉 Bridge Node</div>';
+        }
+                
         return `
             <div><strong>${nodeAttributes.label}</strong></div>
-            <div>Type: ${attrs.nodeType || 'Unknown'}</div>
+            ${bridgeInfo}
+
             <div>Capacity: ${attrs.totalCapacity}</div>
             <div>Channels: ${attrs.totalChannels}</div>
+            <div>Pleb Rank: ${attrs.plebRank}</div>
+            <div>Type: ${attrs.nodeType || 'Unknown'}</div>
+
         `;
     }
     
-    /**
-     * Generates HTML content for edge hover tooltips
-     * Shows: source node, target node, capacity, channel type
-     */
     function createEdgeTooltip(edgeAttributes, graph, edgeId) {
         const attrs = edgeAttributes.attributes;
         const sourceNode = graph.getNodeAttributes(graph.source(edgeId));
         const targetNode = graph.getNodeAttributes(graph.target(edgeId));
         
+        let bridgeInfo = '';
+        if (attrs.isImportantBridgeChannel) {
+            bridgeInfo = '<div style="color: #FF0000; font-weight: bold;">🌉 Critical Bridge Channel</div>';
+        } else if (attrs.isBridgeChannel) {
+            bridgeInfo = '<div style="color: #FFA500; font-weight: bold;">🌉 Bridge Channel</div>';
+        }
+        
         return `
             <div><strong>Channel</strong></div>
+            ${bridgeInfo}
             <div>From: ${sourceNode.label}</div>
             <div>To: ${targetNode.label}</div>
             <div>Capacity: ${formatCapacity(attrs.capacity)}</div>
@@ -579,14 +514,10 @@ function createTooltipManager(tooltipElement) {
 
 /**
  * Manages sidebar information panel updates when nodes/edges are clicked
- * Generates detailed HTML content for node and channel information display
- * @returns {Object} API for sidebar operations (updateNodeInfo, updateEdgeInfo, reset)
+ * Shows enhanced network analysis metrics
+ * @returns {Object} API for sidebar operations
  */
 function createSidebarManager() {
-    /**
-     * Updates sidebar with detailed node information
-     * Parses and displays category counts JSON data
-     */
     function updateNodeInfo(nodeAttributes) {
         const attrs = nodeAttributes.attributes;
         
@@ -606,32 +537,81 @@ function createSidebarManager() {
         } catch (e) {
             categoryCountsHtml = `<div>${attrs.categoryCount || 'N/A'}</div>`;
         }
+        
+        // Bridge node information
+        let bridgeInfo = '';
+        if (attrs.isImportantBridgeNode) {
+            bridgeInfo = `
+                <div style="margin-top: 10px; padding: 10px; background: rgba(255, 0, 0, 0.1); border-left: 3px solid #FF0000;">
+                    <div style="font-weight: bold; color: #FF0000;">🌉 Critical Bridge Node</div>
+                    <div><span class="info-label">Bridges Clusters:</span> ${attrs.bridgesClusters || 'N/A'}</div>
+                    <div><span class="info-label">Cluster Connections:</span> ${attrs.clusterConnections || 'N/A'}</div>
+                </div>
+            `;
+        } else if (attrs.isBridgeNode) {
+            bridgeInfo = `
+                <div style="margin-top: 10px; padding: 10px; background: rgba(255, 165, 0, 0.1); border-left: 3px solid #FFA500;">
+                    <div style="font-weight: bold; color: #FFA500;">🌉 Bridge Node</div>
+                    <div><span class="info-label">Bridges Clusters:</span> ${attrs.bridgesClusters || 'N/A'}</div>
+                    <div><span class="info-label">Cluster Connections:</span> ${attrs.clusterConnections || 'N/A'}</div>
+                </div>
+            `;
+        }
+        
+        // Cluster information
+        let clusterInfo = '';
+        if (attrs.cluster !== undefined && attrs.cluster !== null) {
+            clusterInfo = `<div><span class="info-label">Cluster:</span> ${attrs.cluster}</div>`;
+        }
+        
+        // Closed channels
+        let closedChannelsInfo = '';
+        if (attrs.closedChannelsCount !== undefined && attrs.closedChannelsCount !== null) {
+            closedChannelsInfo = `<div><span class="info-label">Closed Channels:</span> ${attrs.closedChannelsCount}</div>`;
+        }
 
         document.getElementById('node-info').innerHTML = `
             <div class="info-title">${nodeAttributes.label}</div>
             <div class="info-content">
+                ${clusterInfo}
                 <div><span class="info-label">Type:</span> ${attrs.nodeType || 'Unknown'}</div>
                 <div><span class="info-label">Total Capacity:</span> ${attrs.totalCapacity}</div>
                 <div><span class="info-label">Total Channels:</span> ${attrs.totalChannels}</div>
-                <div><span class="info-label">Channel Segment:</span> ${attrs.channelSegment}</div>
+                ${closedChannelsInfo}
                 <div><span class="info-label">Pleb Rank:</span> ${attrs.plebRank}</div>
                 <div><span class="info-label">Capacity Rank:</span> ${attrs.capacityRank}</div>
                 <div><span class="info-label">Channels Rank:</span> ${attrs.channelsRank}</div>
                 <div><span class="info-label">Public Key:</span> ${attrs.pubKey}</div>
+                <div><span class="info-label">Birth Transaction:</span> ${attrs.birthTx || 'N/A'}</div>
+                ${bridgeInfo}
                 <div style="margin-top: 10px;"><span class="info-label">Channel Categories:</span></div>
                 ${categoryCountsHtml}
             </div>
         `;
     }
     
-    /**
-     * Updates sidebar with detailed channel information
-     * Shows source/target nodes and channel properties
-     */
     function updateEdgeInfo(edgeAttributes, graph, edgeId) {
         const attrs = edgeAttributes.attributes;
         const sourceNode = graph.getNodeAttributes(graph.source(edgeId));
         const targetNode = graph.getNodeAttributes(graph.target(edgeId));
+        
+        // Bridge channel information
+        let bridgeInfo = '';
+        if (attrs.isImportantBridgeChannel) {
+            bridgeInfo = `
+                <div style="margin-top: 10px; padding: 10px; background: rgba(255, 0, 0, 0.1); border-left: 3px solid #FF0000;">
+                    <div style="font-weight: bold; color: #FF0000;">🌉 Critical Bridge Channel</div>
+                    <div><span class="info-label">Connects Clusters:</span> ${attrs.connectsClusters || 'N/A'}</div>
+                </div>
+            `;
+        } else if (attrs.isBridgeChannel) {
+            bridgeInfo = `
+                <div style="margin-top: 10px; padding: 10px; background: rgba(255, 165, 0, 0.1); border-left: 3px solid #FFA500;">
+                    <div style="font-weight: bold; color: #FFA500;">🌉 Bridge Channel</div>
+                    <div><span class="info-label">Connects Clusters:</span> ${attrs.connectsClusters || 'N/A'}</div>
+                </div>
+            `;
+        }
 
         document.getElementById('edge-info').innerHTML = `
             <div class="info-title">Channel Details</div>
@@ -640,15 +620,11 @@ function createSidebarManager() {
                 <div><span class="info-label">To:</span> ${targetNode.label}</div>
                 <div><span class="info-label">Capacity:</span> ${formatCapacity(attrs.capacity)}</div>
                 <div><span class="info-label">Channel Size Tier:</span> ${attrs.channelSizeTier}</div>
-                <div><span class="info-label">Size Range:</span> ${attrs.channelSizeRange}</div>
-                <div><span class="info-label">Channel ID:</span> ${attrs.id}</div>
+                ${bridgeInfo}
             </div>
         `;
     }
     
-    /**
-     * Resets sidebar to default empty state
-     */
     function reset() {
         document.getElementById('node-info').innerHTML = `
             <div class="info-title">Node Information</div>
@@ -665,14 +641,56 @@ function createSidebarManager() {
 
 /**
  * Sets up all mouse and click event handlers for the graph visualization
- * Coordinates between tooltip manager, sidebar manager, and node selection
+ * Implements Sigma.js demo-style node selection with edge highlighting
  * @param {Object} renderer - Sigma.js renderer instance
  * @param {Object} graph - Graphology graph instance
  * @param {Object} tooltipManager - Tooltip management API
  * @param {Object} sidebarManager - Sidebar management API
  */
 function setupEventHandlers(renderer, graph, tooltipManager, sidebarManager) {
-    // Consolidated tooltip handlers
+    // State reducer for graph display based on selection
+    // This follows the Sigma.js demo pattern for node selection highlighting
+    renderer.setSetting('nodeReducer', (node, data) => {
+        const res = { ...data };
+        
+        if (selectedNode) {
+            // If a node is selected, dim all nodes except selected and its neighbors
+            if (node === selectedNode || graph.hasEdge(node, selectedNode) || graph.hasEdge(selectedNode, node)) {
+                // Selected node and neighbors remain normal
+                res.highlighted = true;
+            } else {
+                // Other nodes are dimmed
+                res.color = '#E0E0E0';
+                res.highlighted = false;
+            }
+        }
+        
+        return res;
+    });
+    
+    renderer.setSetting('edgeReducer', (edge, data) => {
+        const res = { ...data };
+        
+        if (selectedNode) {
+            // Only show edges connected to the selected node
+            const source = graph.source(edge);
+            const target = graph.target(edge);
+            
+            if (source === selectedNode || target === selectedNode) {
+                // Connected edges are highlighted with brighter color
+                res.hidden = false;
+                res.color = '#000000';  // Black for highlighted edges (like Sigma.js demo)
+                res.size = Math.max(res.size || 1, 2);  // Make connected edges slightly thicker
+            } else {
+                // Other edges are hidden
+                res.hidden = true;
+            }
+        }
+        
+        return res;
+    });
+    
+    // Tooltip handlers
     renderer.on('enterNode', event => {
         const nodeAttributes = graph.getNodeAttributes(event.node);
         const content = tooltipManager.createNodeTooltip(nodeAttributes);
@@ -693,22 +711,36 @@ function setupEventHandlers(renderer, graph, tooltipManager, sidebarManager) {
         tooltipManager.hide();
     });
 
-    // Consolidated mouse move for tooltip positioning
+    // Mouse move for tooltip positioning
     renderer.getMouseCaptor().on('mousemove', event => {
         if (tooltipManager.currentHover) {
             tooltipManager.position(event);
         }
     });
 
-    // Consolidated click handlers
+    // Click handlers - Sigma.js demo style
     renderer.on('clickNode', event => {
         const nodeAttributes = graph.getNodeAttributes(event.node);
         sidebarManager.updateNodeInfo(nodeAttributes);
         
-        // Toggle node selection for gray-out effect
-        selectedNode = selectedNode === event.node ? null : event.node;
+        // Toggle node selection - clicking same node deselects it
+        if (selectedNode === event.node) {
+            selectedNode = null;
+        } else {
+            selectedNode = event.node;
+        }
+        
+        // Refresh renderer to apply the reducers
         renderer.refresh();
-        renderer.render();
+    });
+    
+    // Click on stage (background) to deselect
+    renderer.on('clickStage', () => {
+        if (selectedNode) {
+            selectedNode = null;
+            sidebarManager.reset();
+            renderer.refresh();
+        }
     });
 
     renderer.on('clickEdge', event => {
@@ -718,38 +750,25 @@ function setupEventHandlers(renderer, graph, tooltipManager, sidebarManager) {
 }
 
 // =============================================================================
-// PHASE 4: Layout MANAGEMENT
-// =============================================================================
-
-// =============================================================================
-// GRAPH LAYOUT MANAGEMENT
+// LAYOUT MANAGEMENT
 // =============================================================================
 
 /**
  * Manages ForceAtlas2 layout algorithm execution and graph positioning
- * Handles start/stop of physics simulation, node centering, and view auto-fitting
- * Replaces complex nested setTimeout chains with clean async operations
  * @param {Object} graph - Graphology graph instance
  * @param {Object} renderer - Sigma.js renderer instance  
  * @param {Array} nodes - Original node data for position tracking
  * @param {Map} originalPositions - Map storing initial node positions for reset
- * @returns {Object} Layout control API (start, stop, reset, initialize)
+ * @returns {Object} Layout control API
  */
 function createLayoutManager(graph, renderer, nodes, originalPositions) {
     let isRunning = false;
     let intervalId = null;
     
-    /**
-     * Utility for clean async delays (replaces nested setTimeout)
-     */
     function delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
     
-    /**
-     * Centers all nodes around point (500,500) while preserving relative positions
-     * Calculates center of mass and shifts all nodes to desired center point
-     */
     function centerNodes() {
         const positions = [];
         nodes.forEach(node => {
@@ -784,18 +803,11 @@ function createLayoutManager(graph, renderer, nodes, originalPositions) {
         });
     }
     
-    /**
-     * Auto-fits camera view to show all nodes after layout completion
-     */
     function autoFit() {
         const camera = renderer.getCamera();
         camera.animatedReset({ duration: 500 });
     }
     
-    /**
-     * Async sequence for layout completion: center → refresh → auto-fit
-     * Replaces complex nested setTimeout chains with readable async/await
-     */
     async function finalizeLayout() {
         await delay(300);
         centerNodes();
@@ -804,19 +816,12 @@ function createLayoutManager(graph, renderer, nodes, originalPositions) {
         autoFit();
     }
     
-    /**
-     * Initial positioning setup when visualization first loads
-     */
     async function initializePositions() {
         await delay(100);
         centerNodes();
         renderer.refresh();
     }
     
-    /**
-     * Starts ForceAtlas2 physics simulation with auto-stop after 8 seconds
-     * Runs layout iterations at 100ms intervals for smooth animation
-     */
     function start(forceAtlas2, settings, toggleBtn) {
         if (isRunning) return;
         
@@ -850,9 +855,6 @@ function createLayoutManager(graph, renderer, nodes, originalPositions) {
         }
     }
     
-    /**
-     * Stops layout algorithm and updates UI button state
-     */
     function stop(toggleBtn) {
         isRunning = false;
         if (intervalId) {
@@ -862,9 +864,6 @@ function createLayoutManager(graph, renderer, nodes, originalPositions) {
         toggleBtn.innerHTML = '<i class="fas fa-play"></i> Start Layout';
     }
     
-    /**
-     * Resets all nodes to their original positions and stops any running layout
-     */
     function reset() {
         if (isRunning) {
             stop(document.getElementById('toggle-layout'));
@@ -888,10 +887,13 @@ function createLayoutManager(graph, renderer, nodes, originalPositions) {
     };
 }
 
+// =============================================================================
+// MAIN VISUALIZATION CREATION
+// =============================================================================
+
 /**
  * Creates the complete interactive graph visualization from loaded data
- * Orchestrates: data processing → graph building → rendering → UI setup → event handling
- * This is the main function that coordinates all other components
+ * Works with the new enhanced data format (snake_case fields, clusters, betweenness, etc.)
  * @param {Object} data - Parsed JSON data containing nodes and edges arrays
  * @param {string} jsonFile - Path to JSON file containing graph data
  */
@@ -906,69 +908,76 @@ function createVisualization(data, jsonFile) {
     // Store original positions for proper reset functionality
     const originalPositions = new Map();
     
-    // Calculate all statistics once using centralized data processing
+    // Calculate all statistics once
     const dataStats = calculateDataStats(nodes, edges);
     const sizeCalculators = createSizeCalculators(dataStats);
 
-    // Detect dataset type and calculate percentiles if needed
-    const datasetType = detectDatasetType(jsonFile, edges);
-    let percentiles = null;
-    
-    if (datasetType === 'gfree' || datasetType === 'ghigh') {
-        percentiles = calculateCapacityPercentiles(edges);
-    }
-
-    /**
-     * Determines if an edge should be visible based on current filters
-     * Currently shows all edges - extend this for capacity-based filtering
-     */
-    function shouldDisplayEdge(graph, edge, selectedNode = null) {
-        return true;
-    }
-
-    /**
-     * Maps Lightning Network node types to visual colors
-     * Modify this function to change node color scheme
-     */
-    function getNodeColor(nodeType) {
-        switch (nodeType) {
-            case 'LSP': return '#4CAF50';
-            case 'Exchange': return '#2196F3';
-            case 'Wallet': return '#FFC107';
-            case 'Payment': return '#9C27B0';
-            case 'Routing': return '#FF5722';
-            default: return '#607D8B';
-        }
-    }
-
     // Build graph: Add nodes with calculated sizes and colors
     nodes.forEach(node => {
-        // Set node color based on type if not already set
-        if (!node.color) {
-            node.color = getNodeColor(node.Node_Type);
-        }
+        // Extract node data (all in snake_case format)
+        const totalChannels = node.total_channels || 0;
+        const totalCapacity = node.total_capacity || 0;
+        const formattedCapacity = node.formatted_total_capacity || formatCapacity(totalCapacity);
+        const nodeType = node.node_type || 'Unknown';
+        const channelSegment = node.channel_segment || 'Unknown';
+        const categoryCount = node.category_counts || {};
+        const plebRank = node.pleb_rank || 'N/A';
+        const capacityRank = node.capacity_rank || 'N/A';
+        const channelsRank = node.channels_rank || 'N/A';
+        const pubKey = node.pub_key || node.id || '';
         
-        const x = node.x || Math.random() * 1000;
-        const y = node.y || Math.random() * 1000;
+        // New enhanced data fields
+        const cluster = node.cluster;
+        const isBridgeNode = node.is_bridge_node || false;
+        const isImportantBridgeNode = node.is_important_bridge_node || false;
+        const bridgesClusters = node.bridges_clusters;
+        const clusterConnections = node.cluster_connections;
+        const nodeBetweenness = node.node_betweenness;
+        const closedChannelsCount = node.closed_channels_count;
+        
+        // Use provided coordinates or generate random ones
+        const x = node.x !== undefined ? node.x : Math.random() * 1000;
+        const y = node.y !== undefined ? node.y : Math.random() * 1000;
+        
+        // Set node color (do not use color from data, only use cluster-based coloring)
+        const nodeColor = node.cluster !== undefined && node.cluster !== null
+            ? CLUSTER_COLORS[node.cluster] || CLUSTER_COLORS.DEFAULT
+            : CLUSTER_COLORS.DEFAULT;
+        
+        // Calculate node size using only channel count (no betweenness)
+        const nodeSize = sizeCalculators.nodeSize(totalChannels);
         
         graph.addNode(node.id, {
             x: x,
             y: y,
-            size: sizeCalculators.nodeSize(node.Total_Channels),
+            size: nodeSize,
             label: node.label || node.alias || node.id,
-            color: node.color,
+            color: nodeColor,
+            // Border for bridge nodes
+            borderColor: isImportantBridgeNode ? BRIDGE_NODE_CONFIG.IMPORTANT_BRIDGE.borderColor :
+                        isBridgeNode ? BRIDGE_NODE_CONFIG.REGULAR_BRIDGE.borderColor : undefined,
+            borderSize: isImportantBridgeNode ? BRIDGE_NODE_CONFIG.IMPORTANT_BRIDGE.borderWidth :
+                       isBridgeNode ? BRIDGE_NODE_CONFIG.REGULAR_BRIDGE.borderWidth : 0,
             // Store all attributes for display
             attributes: {
                 alias: node.alias,
-                nodeType: node.Node_Type || 'Unknown',
-                totalCapacity: node.Formatted_Total_Capacity,
-                totalChannels: node.Total_Channels,
-                channelSegment: node.channel_segment,
-                categoryCount: node.Category_Counts,
-                plebRank: node.Pleb_Rank,
-                capacityRank: node.Total_Capacity_Rank,
-                channelsRank: node.Total_Channels_Rank,
-                pubKey: node.pub_key
+                nodeType: nodeType,
+                totalCapacity: formattedCapacity,
+                totalChannels: totalChannels,
+                channelSegment: channelSegment,
+                categoryCount: categoryCount,
+                plebRank: plebRank,
+                capacityRank: capacityRank,
+                channelsRank: channelsRank,
+                pubKey: pubKey,
+                cluster: cluster,
+                isBridgeNode: isBridgeNode,
+                isImportantBridgeNode: isImportantBridgeNode,
+                bridgesClusters: bridgesClusters,
+                clusterConnections: clusterConnections,
+                nodeBetweenness: nodeBetweenness,
+                closedChannelsCount: closedChannelsCount,
+                birthTx: node.birth_tx
             }
         });
         
@@ -976,22 +985,41 @@ function createVisualization(data, jsonFile) {
         originalPositions.set(node.id, { x: x, y: y });
     });
 
-    // Build graph: Add edges with dynamic coloring based on dataset type
+    // Build graph: Add edges with dynamic coloring
     edges.forEach(edge => {
         try {
-            // Get edge color and style using the new dynamic coloring system
-            const { color, type } = getEdgeColorAndStyle(edge, datasetType, percentiles);
+            // Extract edge data (all in snake_case format)
+            const channelSizeTier = edge.channel_size_tier || 'Unknown';
+            const channelSizeRange = edge.channel_size_range || 'Unknown';
+            
+            // New enhanced data fields
+            const isBridgeChannel = edge.is_bridge_channel || false;
+            const isImportantBridgeChannel = edge.is_important_bridge_channel || false;
+            const connectsClusters = edge.connects_clusters;
+            const edgeBetweenness = edge.edge_betweenness;
+            
+            // Get edge color (do not use color from data, only use bridge/highlight logic)
+            const color = edge.is_important_bridge_channel ? EDGE_HIGHLIGHT.IMPORTANT_BRIDGE :
+                          edge.is_bridge_channel ? EDGE_HIGHLIGHT.REGULAR_BRIDGE :
+                          EDGE_HIGHLIGHT.DEFAULT;
+            
+            // Calculate edge width using only capacity (no betweenness)
+            const edgeWidth = sizeCalculators.edgeWidth(edge.capacity);
             
             graph.addEdge(edge.source, edge.target, {
-                size: sizeCalculators.edgeWidth(edge.capacity),
+                size: edgeWidth,
                 color: color,
-                type: type,  // 'line' for solid, 'dashed' for dotted
+                type: edge.type || 'line',
                 // Store all attributes for display
                 attributes: {
                     id: edge.id,
-                    channelSizeTier: edge.Channel_Size_Tier,
-                    channelSizeRange: edge.Channel_Size_Range,
-                    capacity: edge.capacity
+                    channelSizeTier: channelSizeTier,
+                    channelSizeRange: channelSizeRange,
+                    capacity: edge.capacity,
+                    isBridgeChannel: isBridgeChannel,
+                    isImportantBridgeChannel: isImportantBridgeChannel,
+                    connectsClusters: connectsClusters,
+                    edgeBetweenness: edgeBetweenness
                 }
             });
         } catch (e) {
@@ -1025,8 +1053,6 @@ function createVisualization(data, jsonFile) {
 
     // Initialize layout management system
     const layoutManager = createLayoutManager(graph, renderer, nodes, originalPositions);
-
-    // Track the current layout manager globally for cleanup
     currentLayoutManager = layoutManager;
 
     // Apply initial node centering when visualization loads
@@ -1075,13 +1101,13 @@ function createVisualization(data, jsonFile) {
                 const nodeAttributes = graph.getNodeAttributes(node);
                 const attrs = nodeAttributes.attributes;
                 
-                // Simple multi-field search - just concatenate available fields
+                // Multi-field search
                 const basicSearchableText = [
                     nodeAttributes.label || '',
                     attrs.alias || '',
                     attrs.nodeType || '',
                     attrs.channelSegment || '',
-                    attrs.pubKey || ''  // Include full pubkey instead of just first 8 chars
+                    attrs.pubKey || ''
                 ].join(' ').toLowerCase();
                 
                 // Add channel categories from category counts (only if count > 0)
@@ -1092,19 +1118,23 @@ function createVisualization(data, jsonFile) {
                         : attrs.categoryCount;
                         
                     if (categoryCountsObj && typeof categoryCountsObj === 'object') {
-                        // Only include channel types that have count > 0
                         const activeChannelTypes = Object.keys(categoryCountsObj)
                             .filter(channelType => categoryCountsObj[channelType] > 0)
                             .map(channelType => channelType.toLowerCase());
                         channelTypesText = activeChannelTypes.join(' ');
                     }
                 } catch (e) {
-                    // If parsing fails, continue without channel types
                     channelTypesText = '';
                 }
                 
+                // Add cluster if available
+                let clusterText = '';
+                if (attrs.cluster !== undefined && attrs.cluster !== null) {
+                    clusterText = `cluster ${attrs.cluster}`;
+                }
+                
                 // Combine all searchable text
-                const searchableText = basicSearchableText + ' ' + channelTypesText;
+                const searchableText = basicSearchableText + ' ' + channelTypesText + ' ' + clusterText;
                 
                 // Check if ALL search terms are found (AND logic)
                 const isMatch = searchTerms.every(term => searchableText.includes(term));
@@ -1127,7 +1157,6 @@ function createVisualization(data, jsonFile) {
                 const source = graph.source(edge);
                 const target = graph.target(edge);
                 
-                // Show edge ONLY if at least one end is an original matching node
                 if ((originalMatchingNodes.has(source) || originalMatchingNodes.has(target)) &&
                     matchingNodes.has(source) && matchingNodes.has(target)) {
                     graph.setEdgeAttribute(edge, 'hidden', false);
@@ -1140,7 +1169,7 @@ function createVisualization(data, jsonFile) {
 
     // Setup control buttons only once
     if (!controlButtonListeners.zoomIn) {
-        // Zoom and camera controls setup
+        // Zoom controls
         const zoomInBtn = document.getElementById('zoom-in');
         if (zoomInBtn) {
             controlButtonListeners.zoomIn = () => {
@@ -1163,7 +1192,7 @@ function createVisualization(data, jsonFile) {
             zoomOutBtn.addEventListener('click', controlButtonListeners.zoomOut);
         }
 
-        // Reset view functionality: restores original state
+        // Reset view functionality
         const resetViewBtn = document.getElementById('reset-view');
         if (resetViewBtn) {
             controlButtonListeners.resetView = () => {
@@ -1207,19 +1236,13 @@ function createVisualization(data, jsonFile) {
         }
     }
 
-    // ForceAtlas2 layout integration with availability checking
+    // ForceAtlas2 layout integration
     const forceAtlas2 = window.graphologyLibrary?.layoutForceAtlas2 || 
                        window.graphology?.layoutForceAtlas2 ||
                        (typeof graphologyLayoutForceAtlas2 !== 'undefined' ? graphologyLayoutForceAtlas2 : null);
-                       
-    console.log('ForceAtlas2 availability check:', {
-        graphologyLibrary: !!window.graphologyLibrary,
-        layoutForceAtlas2: !!forceAtlas2,
-        libraryKeys: window.graphologyLibrary ? Object.keys(window.graphologyLibrary) : 'No graphologyLibrary'
-    });
 
     if (!forceAtlas2) {
-        // Handle missing layout library: disable button and show error
+        // Handle missing layout library
         const toggleLayoutBtn = document.getElementById('toggle-layout');
         if (toggleLayoutBtn) {
             toggleLayoutBtn.disabled = true;
@@ -1228,17 +1251,17 @@ function createVisualization(data, jsonFile) {
             toggleLayoutBtn.style.cursor = 'not-allowed';
         }
     } else {
-        // ForceAtlas2 layout settings - modify these to change physics behavior
+        // ForceAtlas2 layout settings
         const layoutSettings = {
-            iterations: 1,              // Layout iterations per step
-            gravity: 0.4,               // Attraction to center
-            scalingRatio: 60,           // Node repulsion strength
-            strongGravityMode: false,   // Use linear or log gravity
-            slowDown: 1.2,              // Damping factor
-            barnesHutOptimize: true,    // Use Barnes-Hut approximation
-            barnesHutTheta: 0.5,        // Barnes-Hut precision
-            adjustSizes: false,         // Consider node sizes in physics
-            edgeWeightInfluence: 0.15   // How much edge weights affect layout
+            iterations: 1,
+            gravity: 0.4,
+            scalingRatio: 60,
+            strongGravityMode: false,
+            slowDown: 1.2,
+            barnesHutOptimize: true,
+            barnesHutTheta: 0.5,
+            adjustSizes: false,
+            edgeWeightInfluence: 0.15
         };
 
         // Set up layout control button
@@ -1255,12 +1278,12 @@ function createVisualization(data, jsonFile) {
         }
     }
 
-    // Update statistics display using enhanced calculated values
+    // Update statistics display
     document.getElementById('node-count').textContent = graph.order;
     document.getElementById('edge-count').textContent = graph.size;
     document.getElementById('total-capacity').textContent = formatCapacity(dataStats.totalCapacity);
 
-    // Update channel size distribution statistics (renamed from capacity to channelSize)
+    // Channel size distribution statistics
     document.getElementById('capacity-min').textContent = formatCapacity(dataStats.channelSize.min);
     document.getElementById('capacity-q25').textContent = formatCapacity(dataStats.channelSize.q25);
     document.getElementById('capacity-median').textContent = formatCapacity(dataStats.channelSize.median);
@@ -1268,7 +1291,7 @@ function createVisualization(data, jsonFile) {
     document.getElementById('capacity-max').textContent = formatCapacity(dataStats.channelSize.max);
     document.getElementById('capacity-avg').textContent = formatCapacity(Math.round(dataStats.channelSize.avg));
 
-    // Update channel count distribution statistics
+    // Channel count distribution statistics
     document.getElementById('channels-min').textContent = Math.floor(dataStats.channels.min).toLocaleString();
     document.getElementById('channels-q25').textContent = Math.floor(dataStats.channels.q25).toLocaleString();
     document.getElementById('channels-median').textContent = Math.floor(dataStats.channels.median).toLocaleString();
@@ -1276,7 +1299,7 @@ function createVisualization(data, jsonFile) {
     document.getElementById('channels-max').textContent = Math.floor(dataStats.channels.max).toLocaleString();
     document.getElementById('channels-avg').textContent = Math.floor(dataStats.channels.avg).toLocaleString();
 
-    // Update node capacity distribution statistics
+    // Node capacity distribution statistics
     document.getElementById('node-capacity-min').textContent = formatCapacity(dataStats.nodeCapacity.min);
     document.getElementById('node-capacity-q25').textContent = formatCapacity(dataStats.nodeCapacity.q25);
     document.getElementById('node-capacity-median').textContent = formatCapacity(dataStats.nodeCapacity.median);

@@ -40,35 +40,6 @@
             <div class="layout-hint" id="layout-hint">
                 Click "Start Layout" multiple times to see patterns emerge
             </div>
-            <div class="legend">
-                <div class="legend-title" style="font-weight: bold; margin-bottom: 10px;">Node Types</div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #4CAF50;"></div>
-                    <div class="legend-text">LSP</div>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #2196F3;"></div>
-                    <div class="legend-text">Exchange</div>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #FFC107;"></div>
-                    <div class="legend-text">Wallet</div>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #9C27B0;"></div>
-                    <div class="legend-text">Payment</div>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #FF5722;"></div>
-                    <div class="legend-text">Routing</div>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #607D8B;"></div>
-                    <div class="legend-text">Other</div>
-                </div>
-                <!-- Channel types legend - dynamically updated based on dataset -->
-                <div id="channel-legend"></div>
-            </div>
         </div>
         <div id="sidebar">
             <div class="header">
@@ -83,9 +54,9 @@
                     Select Dataset
                 </label>
                 <select id="dataset-select">
+                    <option value="data/gfree.json" selected>Freeway Network</option>
+                    <option value="data/ghigh.json">Highway Network</option>
                     <option value="data/gall.json">Complete Network</option>
-                    <option value="data/gfree.json" selected>Freeway</option>
-                    <option value="data/ghigh.json">Highway</option>
                 </select>
                 <button id="load-dataset-btn">
                     <i class="fas fa-sync-alt"></i> Load Dataset
@@ -168,8 +139,11 @@
         // Dataset configuration
         const DATASETS = {
             'data/gall.json': 'Complete Network',
+            
             'data/gfree.json': 'Freeway',
-            'data/ghigh.json': 'Highway'
+            
+            'data/ghigh.json': 'Highway',
+            
         };
 
         // Get initial dataset from URL parameter or use default
@@ -182,7 +156,7 @@
                 return fileParam;
             }
             
-            // Default to Freeway
+            // Default to Freeway Enhanced (new data)
             return 'data/gfree.json';
         }
 

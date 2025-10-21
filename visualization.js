@@ -951,7 +951,7 @@ function createVisualization(data, jsonFile) {
             x: x,
             y: y,
             size: nodeSize,
-            label: node.label || node.alias || node.id,
+            label: node.alias || node.id,
             color: nodeColor,
             // Border for bridge nodes
             borderColor: isImportantBridgeNode ? BRIDGE_NODE_CONFIG.IMPORTANT_BRIDGE.borderColor :

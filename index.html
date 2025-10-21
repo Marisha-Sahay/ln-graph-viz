@@ -66,6 +66,78 @@
             <div id="search-container">
                 <input type="text" id="search-input" placeholder="Search nodes by name...">
             </div>
+            
+            <!-- Filters Section -->
+            <div id="filters">
+                <div class="filters-title" id="filters-toggle" style="cursor: pointer; user-select: none;">
+                    <i class="fas fa-filter"></i> Filters
+                    <i class="fas fa-chevron-down" id="filters-chevron" style="margin-left: auto; font-size: 12px;"></i>
+                </div>
+                
+                <div id="filters-content" style="display: none;">
+                    <div class="filter-section">
+                        <div class="filter-label">
+                            <i class="fas fa-trophy"></i> Pleb Rank (Top N)
+                        </div>
+                        <div class="filter-control">
+                            <input type="range" id="pleb-rank-slider" min="0" max="10000" step="100" value="10000">
+                            <div class="filter-value">
+                                <span id="pleb-rank-value">All</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-section">
+                        <div class="filter-label">
+                            <i class="fas fa-bridge"></i> Node Bridges
+                        </div>
+                        <div class="filter-control">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="filter-all-nodes" checked>
+                                <span>Show All Nodes</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="filter-important-bridge">
+                                <span>Critical Bridge Only</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="filter-any-bridge">
+                                <span>Any Bridge Only</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-section">
+                        <div class="filter-label">
+                            <i class="fas fa-link"></i> Channel Bridges
+                        </div>
+                        <div class="filter-control">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="filter-all-channels" checked>
+                                <span>Show All Channels</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="filter-bridge-channels">
+                                <span>Bridge Channels Only</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-actions">
+                        <button class="filter-btn" id="apply-filters">
+                            <i class="fas fa-check"></i> Apply Filters
+                        </button>
+                        <button class="filter-btn secondary" id="clear-filters">
+                            <i class="fas fa-times"></i> Clear
+                        </button>
+                    </div>
+                    
+                    <div id="filter-results" class="filter-results">
+                        <span id="visible-count">0</span> / <span id="total-count">0</span> nodes visible
+                    </div>
+                </div>
+            </div>
+            
             <div id="node-info">
                 <div class="info-title">Node Information</div>
                 <div class="info-content">Select a node to see details</div>
@@ -73,46 +145,6 @@
             <div id="edge-info">
                 <div class="info-title">Channel Information</div>
                 <div class="info-content">Select a channel to see details</div>
-            </div>
-            <div id="stats">
-                <div class="stats-title">Network Statistics</div>
-                
-                <div class="stats-section">
-                    <div class="stats-subtitle">Network Overview</div>
-                    <div>Nodes: <span id="node-count">0</span></div>
-                    <div>Channels: <span id="edge-count">0</span></div>
-                    <div>Total Capacity: <span id="total-capacity">0</span></div>
-                </div>
-                
-                <div class="stats-section">
-                    <div class="stats-subtitle">Channel Size Distribution</div>
-                    <div>Min: <span id="capacity-min">0</span></div>
-                    <div>25%: <span id="capacity-q25">0</span></div>
-                    <div>50% (Median): <span id="capacity-median">0</span></div>
-                    <div>75%: <span id="capacity-q75">0</span></div>
-                    <div>Max: <span id="capacity-max">0</span></div>
-                    <div>Average: <span id="capacity-avg">0</span></div>
-                </div>
-                
-                <div class="stats-section">
-                    <div class="stats-subtitle">Node Channel # Distribution</div>
-                    <div>Min Channels: <span id="channels-min">0</span></div>
-                    <div>25%: <span id="channels-q25">0</span></div>
-                    <div>50% (Median): <span id="channels-median">0</span></div>
-                    <div>75%: <span id="channels-q75">0</span></div>
-                    <div>Max Channels: <span id="channels-max">0</span></div>
-                    <div>Average: <span id="channels-avg">0</span></div>
-                </div>
-                
-                <div class="stats-section">
-                    <div class="stats-subtitle">Node Capacity Distribution</div>
-                    <div>Min Capacity: <span id="node-capacity-min">0</span></div>
-                    <div>25%: <span id="node-capacity-q25">0</span></div>
-                    <div>50% (Median): <span id="node-capacity-median">0</span></div>
-                    <div>75%: <span id="node-capacity-q75">0</span></div>
-                    <div>Max Capacity: <span id="node-capacity-max">0</span></div>
-                    <div>Average: <span id="node-capacity-avg">0</span></div>
-                </div>
             </div>
         </div>
     </div>
@@ -233,6 +265,23 @@
                 const selectedDataset = datasetSelect.value;
                 // Simply reload the page with the new dataset parameter
                 window.location.href = `?file=${selectedDataset}`;
+            });
+
+            // Toggle filters section
+            const filtersToggle = document.getElementById('filters-toggle');
+            const filtersContent = document.getElementById('filters-content');
+            const filtersChevron = document.getElementById('filters-chevron');
+            
+            filtersToggle.addEventListener('click', () => {
+                if (filtersContent.style.display === 'none') {
+                    filtersContent.style.display = 'block';
+                    filtersChevron.classList.remove('fa-chevron-down');
+                    filtersChevron.classList.add('fa-chevron-up');
+                } else {
+                    filtersContent.style.display = 'none';
+                    filtersChevron.classList.remove('fa-chevron-up');
+                    filtersChevron.classList.add('fa-chevron-down');
+                }
             });
         });
     </script>

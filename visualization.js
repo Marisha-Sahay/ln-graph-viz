@@ -19,40 +19,40 @@ const CAPACITY_THRESHOLDS = {
 
 // Cluster color palette for network communities
 const CLUSTER_COLORS = {
-    0: '#FF6B6B',   // Red
-    1: '#4ECDC4',   // Teal
-    2: '#45B7D1',   // Blue
-    3: '#FFA07A',   // Light Salmon
-    4: '#98D8C8',   // Mint
-    5: '#F7DC6F',   // Yellow
-    6: '#BB8FCE',   // Purple
-    7: '#85C1E2',   // Sky Blue
-    8: '#F8B739',   // Orange
-    9: '#52B788',   // Green
-    10: '#E07A5F',  // Terra Cotta
-    11: '#3D5A80',  // Navy
-    12: '#81B29A',  // Sage
-    13: '#F2CC8F',  // Sand
-    14: '#D62828',  // Crimson
-    DEFAULT: '#607D8B'  // Gray for unknown
+    0: '#60A5FA',   // Warm blue (blue-400) - Distinct and vibrant
+    1: '#4ADE80',   // Warm green (green-400) - High contrast with blue
+    2: '#C084FC',   // Warm purple (purple-400) - Distinct from blue/green
+    3: '#FACC15',   // Warm amber (amber-400) - Warm yellow tone
+    4: '#2DD4BF',   // Warm teal (teal-400) - Green-blue blend
+    5: '#F87171',   // Warm red (red-400) - Red for variety
+    6: '#FB923C',   // Warm orange (orange-400) - Orange complement
+    7: '#EAB308',   // Warm yellow (yellow-500) - Bright yellow
+    8: '#A3E635',   // Warm lime (lime-400) - Light green
+    9: '#34D399',   // Warm emerald (emerald-400) - Deeper green
+    10: '#22D3EE',  // Warm cyan (cyan-400) - Blue-green
+    11: '#38BDF8',  // Warm sky (sky-400) - Light blue
+    12: '#818CF8',  // Warm indigo (indigo-400) - Blue-purple
+    13: '#A78BFA',  // Warm violet (violet-400) - Purple-blue
+    14: '#F472B6',  // Warm pink (pink-400) - Pink accent
+    DEFAULT: '#9CA3AF'  // Soft gray (gray-400)
 };
 
 // Bridge node highlighting
 const BRIDGE_NODE_CONFIG = {
     IMPORTANT_BRIDGE: {
-        borderColor: '#FF0000',
+        borderColor: '#EF4444',
         borderWidth: 3
     },
     REGULAR_BRIDGE: {
-        borderColor: '#FFA500',
+        borderColor: '#FB923C',
         borderWidth: 2
     }
 };
 
 // Edge coloring - using pre-calculated colors from data
 const EDGE_HIGHLIGHT = {
-    IMPORTANT_BRIDGE: '#FF0000',  // Red for critical bridges
-    REGULAR_BRIDGE: '#FFA500',    // Orange for regular bridges
+    IMPORTANT_BRIDGE: '#B0B0B0',  // Darker gray for critical bridges
+    REGULAR_BRIDGE: '#C8C8C8',    // Medium gray for regular bridges
     DEFAULT: '#D8D8D8'            // Light gray for normal edges
 };
 
@@ -80,6 +80,17 @@ let currentSearchHandler = null;
 
 // Track if a dataset is currently being loaded to prevent concurrent loads
 let isLoadingDataset = false;
+
+// Global filter state
+let filterState = {
+    plebRankMax: null,  // null = show all
+    bridgeFilter: 'all', // 'all', 'important', 'any'
+    channelBridgeFilter: 'all', // 'all', 'bridge_only'
+    isActive: false  // Track if any filters are active
+};
+
+// Store total node count for filter results display
+let totalNodeCount = 0;
 
 // =============================================================================
 // CLEANUP FUNCTION
@@ -470,9 +481,9 @@ function createTooltipManager(tooltipElement) {
         let bridgeInfo = '';
         
         if (attrs.isImportantBridgeNode) {
-            bridgeInfo = '<div style="color: #FF0000; font-weight: bold;">🌉 Critical Bridge Node</div>';
+            bridgeInfo = '<div style="color: #EF4444; font-weight: bold;">🌉 Critical Bridge Node</div>';
         } else if (attrs.isBridgeNode) {
-            bridgeInfo = '<div style="color: #FFA500; font-weight: bold;">🌉 Bridge Node</div>';
+            bridgeInfo = '<div style="color: #FB923C; font-weight: bold;">🌉 Bridge Node</div>';
         }
                 
         return `
@@ -494,9 +505,9 @@ function createTooltipManager(tooltipElement) {
         
         let bridgeInfo = '';
         if (attrs.isImportantBridgeChannel) {
-            bridgeInfo = '<div style="color: #FF0000; font-weight: bold;">🌉 Critical Bridge Channel</div>';
+            bridgeInfo = '<div style="color: #B0B0B0; font-weight: bold;">🌉 Critical Bridge Channel</div>';
         } else if (attrs.isBridgeChannel) {
-            bridgeInfo = '<div style="color: #FFA500; font-weight: bold;">🌉 Bridge Channel</div>';
+            bridgeInfo = '<div style="color: #C8C8C8; font-weight: bold;">🌉 Bridge Channel</div>';
         }
         
         return `
@@ -542,16 +553,16 @@ function createSidebarManager() {
         let bridgeInfo = '';
         if (attrs.isImportantBridgeNode) {
             bridgeInfo = `
-                <div style="margin-top: 10px; padding: 10px; background: rgba(255, 0, 0, 0.1); border-left: 3px solid #FF0000;">
-                    <div style="font-weight: bold; color: #FF0000;">🌉 Critical Bridge Node</div>
+                <div style="margin-top: 10px; padding: 10px; background: rgba(239, 68, 68, 0.1); border-left: 3px solid #EF4444;">
+                    <div style="font-weight: bold; color: #EF4444;">🌉 Critical Bridge Node</div>
                     <div><span class="info-label">Bridges Clusters:</span> ${attrs.bridgesClusters || 'N/A'}</div>
                     <div><span class="info-label">Cluster Connections:</span> ${attrs.clusterConnections || 'N/A'}</div>
                 </div>
             `;
         } else if (attrs.isBridgeNode) {
             bridgeInfo = `
-                <div style="margin-top: 10px; padding: 10px; background: rgba(255, 165, 0, 0.1); border-left: 3px solid #FFA500;">
-                    <div style="font-weight: bold; color: #FFA500;">🌉 Bridge Node</div>
+                <div style="margin-top: 10px; padding: 10px; background: rgba(251, 146, 60, 0.1); border-left: 3px solid #FB923C;">
+                    <div style="font-weight: bold; color: #FB923C;">🌉 Bridge Node</div>
                     <div><span class="info-label">Bridges Clusters:</span> ${attrs.bridgesClusters || 'N/A'}</div>
                     <div><span class="info-label">Cluster Connections:</span> ${attrs.clusterConnections || 'N/A'}</div>
                 </div>
@@ -599,15 +610,15 @@ function createSidebarManager() {
         let bridgeInfo = '';
         if (attrs.isImportantBridgeChannel) {
             bridgeInfo = `
-                <div style="margin-top: 10px; padding: 10px; background: rgba(255, 0, 0, 0.1); border-left: 3px solid #FF0000;">
-                    <div style="font-weight: bold; color: #FF0000;">🌉 Critical Bridge Channel</div>
+                <div style="margin-top: 10px; padding: 10px; background: rgba(176, 176, 176, 0.1); border-left: 3px solid #B0B0B0;">
+                    <div style="font-weight: bold; color: #B0B0B0;">🌉 Critical Bridge Channel</div>
                     <div><span class="info-label">Connects Clusters:</span> ${attrs.connectsClusters || 'N/A'}</div>
                 </div>
             `;
         } else if (attrs.isBridgeChannel) {
             bridgeInfo = `
-                <div style="margin-top: 10px; padding: 10px; background: rgba(255, 165, 0, 0.1); border-left: 3px solid #FFA500;">
-                    <div style="font-weight: bold; color: #FFA500;">🌉 Bridge Channel</div>
+                <div style="margin-top: 10px; padding: 10px; background: rgba(200, 200, 200, 0.1); border-left: 3px solid #C8C8C8;">
+                    <div style="font-weight: bold; color: #C8C8C8;">🌉 Bridge Channel</div>
                     <div><span class="info-label">Connects Clusters:</span> ${attrs.connectsClusters || 'N/A'}</div>
                 </div>
             `;
@@ -660,7 +671,7 @@ function setupEventHandlers(renderer, graph, tooltipManager, sidebarManager) {
                 res.highlighted = true;
             } else {
                 // Other nodes are dimmed
-                res.color = '#E0E0E0';
+                res.color = '#F3F4F6';
                 res.highlighted = false;
             }
         }
@@ -677,9 +688,11 @@ function setupEventHandlers(renderer, graph, tooltipManager, sidebarManager) {
             const target = graph.target(edge);
             
             if (source === selectedNode || target === selectedNode) {
-                // Connected edges are highlighted with brighter color
+                // Connected edges are highlighted with the selected node's cluster color
                 res.hidden = false;
-                res.color = '#000000';  // Black for highlighted edges (like Sigma.js demo)
+                const selectedNodeAttrs = graph.getNodeAttributes(selectedNode);
+                const cluster = selectedNodeAttrs.attributes.cluster;
+                res.color = CLUSTER_COLORS[cluster] || CLUSTER_COLORS.DEFAULT;
                 res.size = Math.max(res.size || 1, 2);  // Make connected edges slightly thicker
             } else {
                 // Other edges are hidden
@@ -1278,32 +1291,210 @@ function createVisualization(data, jsonFile) {
         }
     }
 
-    // Update statistics display
-    document.getElementById('node-count').textContent = graph.order;
-    document.getElementById('edge-count').textContent = graph.size;
-    document.getElementById('total-capacity').textContent = formatCapacity(dataStats.totalCapacity);
-
-    // Channel size distribution statistics
-    document.getElementById('capacity-min').textContent = formatCapacity(dataStats.channelSize.min);
-    document.getElementById('capacity-q25').textContent = formatCapacity(dataStats.channelSize.q25);
-    document.getElementById('capacity-median').textContent = formatCapacity(dataStats.channelSize.median);
-    document.getElementById('capacity-q75').textContent = formatCapacity(dataStats.channelSize.q75);
-    document.getElementById('capacity-max').textContent = formatCapacity(dataStats.channelSize.max);
-    document.getElementById('capacity-avg').textContent = formatCapacity(Math.round(dataStats.channelSize.avg));
-
-    // Channel count distribution statistics
-    document.getElementById('channels-min').textContent = Math.floor(dataStats.channels.min).toLocaleString();
-    document.getElementById('channels-q25').textContent = Math.floor(dataStats.channels.q25).toLocaleString();
-    document.getElementById('channels-median').textContent = Math.floor(dataStats.channels.median).toLocaleString();
-    document.getElementById('channels-q75').textContent = Math.floor(dataStats.channels.q75).toLocaleString();
-    document.getElementById('channels-max').textContent = Math.floor(dataStats.channels.max).toLocaleString();
-    document.getElementById('channels-avg').textContent = Math.floor(dataStats.channels.avg).toLocaleString();
-
-    // Node capacity distribution statistics
-    document.getElementById('node-capacity-min').textContent = formatCapacity(dataStats.nodeCapacity.min);
-    document.getElementById('node-capacity-q25').textContent = formatCapacity(dataStats.nodeCapacity.q25);
-    document.getElementById('node-capacity-median').textContent = formatCapacity(dataStats.nodeCapacity.median);
-    document.getElementById('node-capacity-q75').textContent = formatCapacity(dataStats.nodeCapacity.q75);
-    document.getElementById('node-capacity-max').textContent = formatCapacity(dataStats.nodeCapacity.max);
-    document.getElementById('node-capacity-avg').textContent = formatCapacity(Math.round(dataStats.nodeCapacity.avg));
+    // =============================================================================
+    // FILTER SYSTEM
+    // =============================================================================
+    
+    // Store total node count for filter display
+    totalNodeCount = graph.order;
+    
+    // Initialize filter UI
+    updateFilterUI();
+    
+    /**
+     * Check if a node passes all active filters
+     */
+    function nodePassesFilters(nodeId) {
+        if (!filterState.isActive) return true;
+        
+        const attrs = graph.getNodeAttributes(nodeId).attributes;
+        
+        // Pleb Rank filter
+        if (filterState.plebRankMax !== null) {
+            const plebRank = attrs.plebRank;
+            if (plebRank === 'N/A' || plebRank === null) return false;
+            const rankNum = typeof plebRank === 'string' ? parseInt(plebRank) : plebRank;
+            if (isNaN(rankNum) || rankNum > filterState.plebRankMax) return false;
+        }
+        
+        // Bridge node filter
+        if (filterState.bridgeFilter === 'important') {
+            if (!attrs.isImportantBridgeNode) return false;
+        } else if (filterState.bridgeFilter === 'any') {
+            if (!attrs.isBridgeNode && !attrs.isImportantBridgeNode) return false;
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Apply filters to the graph
+     */
+    function applyFilters() {
+        let visibleCount = 0;
+        
+        // Apply filters to nodes
+        graph.forEachNode(nodeId => {
+            const passes = nodePassesFilters(nodeId);
+            graph.setNodeAttribute(nodeId, 'hidden', !passes);
+            if (passes) visibleCount++;
+        });
+        
+        // Hide edges where both nodes are hidden
+        graph.forEachEdge(edgeId => {
+            const source = graph.source(edgeId);
+            const target = graph.target(edgeId);
+            const sourceHidden = graph.getNodeAttribute(source, 'hidden');
+            const targetHidden = graph.getNodeAttribute(target, 'hidden');
+            graph.setEdgeAttribute(edgeId, 'hidden', sourceHidden || targetHidden);
+        });
+        
+        // Update visible count
+        document.getElementById('visible-count').textContent = visibleCount;
+        document.getElementById('total-count').textContent = totalNodeCount;
+        
+        renderer.refresh();
+    }
+    
+    /**
+     * Update filter UI elements
+     */
+    function updateFilterUI() {
+        document.getElementById('visible-count').textContent = totalNodeCount;
+        document.getElementById('total-count').textContent = totalNodeCount;
+    }
+    
+    // Pleb Rank slider
+    const plebRankSlider = document.getElementById('pleb-rank-slider');
+    const plebRankValue = document.getElementById('pleb-rank-value');
+    
+    if (plebRankSlider && plebRankValue) {
+        plebRankSlider.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            if (value >= 10000) {
+                plebRankValue.textContent = 'All';
+            } else {
+                plebRankValue.textContent = `Top ${value}`;
+            }
+        });
+    }
+    
+    // Bridge node filter checkboxes (radio button behavior)
+    const filterAllNodes = document.getElementById('filter-all-nodes');
+    const filterImportantBridge = document.getElementById('filter-important-bridge');
+    const filterAnyBridge = document.getElementById('filter-any-bridge');
+    
+    if (filterAllNodes && filterImportantBridge && filterAnyBridge) {
+        filterAllNodes.addEventListener('change', () => {
+            if (filterAllNodes.checked) {
+                filterImportantBridge.checked = false;
+                filterAnyBridge.checked = false;
+            }
+        });
+        
+        filterImportantBridge.addEventListener('change', () => {
+            if (filterImportantBridge.checked) {
+                filterAllNodes.checked = false;
+                filterAnyBridge.checked = false;
+            }
+        });
+        
+        filterAnyBridge.addEventListener('change', () => {
+            if (filterAnyBridge.checked) {
+                filterAllNodes.checked = false;
+                filterImportantBridge.checked = false;
+            }
+        });
+    }
+    
+    // Channel bridge filter checkboxes (radio button behavior)
+    const filterAllChannels = document.getElementById('filter-all-channels');
+    const filterBridgeChannels = document.getElementById('filter-bridge-channels');
+    
+    if (filterAllChannels && filterBridgeChannels) {
+        filterAllChannels.addEventListener('change', () => {
+            if (filterAllChannels.checked) {
+                filterBridgeChannels.checked = false;
+            }
+        });
+        
+        filterBridgeChannels.addEventListener('change', () => {
+            if (filterBridgeChannels.checked) {
+                filterAllChannels.checked = false;
+            }
+        });
+    }
+    
+    // Apply Filters button
+    const applyFiltersBtn = document.getElementById('apply-filters');
+    if (applyFiltersBtn) {
+        applyFiltersBtn.addEventListener('click', () => {
+            // Update filter state from UI
+            const plebRankValue = parseInt(plebRankSlider.value);
+            filterState.plebRankMax = plebRankValue >= 10000 ? null : plebRankValue;
+            
+            // Bridge node filter
+            if (filterImportantBridge.checked) {
+                filterState.bridgeFilter = 'important';
+            } else if (filterAnyBridge.checked) {
+                filterState.bridgeFilter = 'any';
+            } else {
+                filterState.bridgeFilter = 'all';
+            }
+            
+            // Channel bridge filter
+            if (filterBridgeChannels.checked) {
+                filterState.channelBridgeFilter = 'bridge_only';
+            } else {
+                filterState.channelBridgeFilter = 'all';
+            }
+            
+            // Check if any filters are active
+            filterState.isActive = 
+                filterState.plebRankMax !== null ||
+                filterState.bridgeFilter !== 'all' ||
+                filterState.channelBridgeFilter !== 'all';
+            
+            // Apply filters
+            applyFilters();
+            
+            console.log('✅ Filters applied:', filterState);
+        });
+    }
+    
+    // Clear Filters button
+    const clearFiltersBtn = document.getElementById('clear-filters');
+    if (clearFiltersBtn) {
+        clearFiltersBtn.addEventListener('click', () => {
+            // Reset filter state
+            filterState.plebRankMax = null;
+            filterState.bridgeFilter = 'all';
+            filterState.channelBridgeFilter = 'all';
+            filterState.isActive = false;
+            
+            // Reset UI
+            plebRankSlider.value = 10000;
+            plebRankValue.textContent = 'All';
+            
+            filterAllNodes.checked = true;
+            filterImportantBridge.checked = false;
+            filterAnyBridge.checked = false;
+            
+            filterAllChannels.checked = true;
+            filterBridgeChannels.checked = false;
+            
+            // Show all nodes and edges
+            graph.forEachNode(nodeId => {
+                graph.setNodeAttribute(nodeId, 'hidden', false);
+            });
+            graph.forEachEdge(edgeId => {
+                graph.setEdgeAttribute(edgeId, 'hidden', false);
+            });
+            
+            updateFilterUI();
+            renderer.refresh();
+            
+            console.log('✅ Filters cleared');
+        });
+    }
 }

@@ -66,6 +66,7 @@ let selectedNode = null;
 // Global reference to current renderer instance for proper cleanup
 let currentRenderer = null;
 let currentLayoutManager = null;
+let currentGraph = null; // Track current graph for summary updates
 
 // Store event listeners for proper cleanup
 let controlButtonListeners = {
@@ -91,6 +92,57 @@ let filterState = {
 
 // Store total node count for filter results display
 let totalNodeCount = 0;
+
+// =============================================================================
+// NETWORK SUMMARY FUNCTION
+// =============================================================================
+
+/**
+ * Updates the network summary box with current visible node and edge counts
+ * This shows the filtered/visible counts, not the total dataset
+ */
+function updateNetworkSummary() {
+    if (!currentGraph) {
+        console.warn('Graph not initialized yet');
+        return;
+    }
+    
+    let visibleNodes = 0;
+    let visibleEdges = 0;
+    
+    // Count visible nodes
+    currentGraph.forEachNode(nodeId => {
+        const isHidden = currentGraph.getNodeAttribute(nodeId, 'hidden');
+        if (!isHidden) {
+            visibleNodes++;
+        }
+    });
+    
+    // Count visible edges
+    currentGraph.forEachEdge(edgeId => {
+        const isHidden = currentGraph.getEdgeAttribute(edgeId, 'hidden');
+        if (!isHidden) {
+            visibleEdges++;
+        }
+    });
+    
+    // Update the summary display
+    const nodesElement = document.getElementById('summary-nodes-count');
+    const channelsElement = document.getElementById('summary-channels-count');
+    
+    if (nodesElement) {
+        nodesElement.textContent = visibleNodes.toLocaleString();
+    }
+    
+    if (channelsElement) {
+        channelsElement.textContent = visibleEdges.toLocaleString();
+    }
+    
+    console.log(`📊 Network Summary: ${visibleNodes} nodes, ${visibleEdges} channels visible`);
+}
+
+// Make updateNetworkSummary available globally
+window.updateNetworkSummary = updateNetworkSummary;
 
 // =============================================================================
 // CLEANUP FUNCTION
@@ -135,6 +187,13 @@ async function destroyVisualization() {
     
     // Reset global state
     selectedNode = null;
+    currentGraph = null; // Clear graph reference
+    
+    // Reset summary display
+    const nodesCountEl = document.getElementById('summary-nodes-count');
+    const channelsCountEl = document.getElementById('summary-channels-count');
+    if (nodesCountEl) nodesCountEl.textContent = '0';
+    if (channelsCountEl) channelsCountEl.textContent = '0';
     
     // Clear search input
     const searchInput = document.getElementById('search-input');
@@ -1063,6 +1122,7 @@ function createVisualization(data, jsonFile) {
 
     // Track the current renderer globally for cleanup
     currentRenderer = renderer;
+    currentGraph = graph; // Store graph reference for summary updates
 
     // Initialize layout management system
     const layoutManager = createLayoutManager(graph, renderer, nodes, originalPositions);
@@ -1078,6 +1138,9 @@ function createVisualization(data, jsonFile) {
     
     // Set up all event handlers for user interactions
     setupEventHandlers(renderer, graph, tooltipManager, sidebarManager);
+
+    // Update network summary with initial counts
+    updateNetworkSummary();
 
     // Search functionality: filters graph based on multiple node fields matching
     const searchInput = document.getElementById('search-input');
@@ -1177,6 +1240,9 @@ function createVisualization(data, jsonFile) {
             });
 
             renderer.refresh();
+            
+            // Update network summary after search
+            updateNetworkSummary();
         });
     }
 
@@ -1244,6 +1310,9 @@ function createVisualization(data, jsonFile) {
                 
                 camera.animatedReset({ duration: TIMING.ZOOM_ANIMATION });
                 currentRenderer.refresh();
+                
+                // Update network summary after reset
+                updateNetworkSummary();
             };
             resetViewBtn.addEventListener('click', controlButtonListeners.resetView);
         }
@@ -1354,6 +1423,9 @@ function createVisualization(data, jsonFile) {
         document.getElementById('total-count').textContent = totalNodeCount;
         
         renderer.refresh();
+        
+        // Update network summary after filters
+        updateNetworkSummary();
     }
     
     /**
@@ -1493,6 +1565,9 @@ function createVisualization(data, jsonFile) {
             
             updateFilterUI();
             renderer.refresh();
+            
+            // Update network summary after clearing filters
+            updateNetworkSummary();
             
             console.log('✅ Filters cleared');
         });

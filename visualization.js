@@ -1,4 +1,124 @@
 // =============================================================================
+// ATTRIBUTE MAPPING - Converts shortened names to original names for UX
+// =============================================================================
+
+/**
+ * Mapping from shortened attribute names (used in JSON) to original attribute names (used in UX)
+ * Based on test.md documentation
+ */
+const ATTRIBUTE_MAPPING = {
+    // Node attributes
+    node: {
+        'alias': 'alias',           // unchanged
+        'c': 'cluster',
+        'br': 'is_bridge_node',
+        'ibr': 'is_important_bridge_node',
+        'bc': 'bridges_clusters',
+        'cc': 'cluster_connections',
+        'pk': 'pub_key',
+        'nt': 'node_type',
+        'tch': 'total_channels',
+        'tcap': 'total_capacity',
+        'fcap': 'formatted_total_capacity',
+        'cat': 'category_counts',
+        'pr': 'pleb_rank',
+        'cr': 'capacity_rank',
+        'chr': 'channels_rank',
+        'btx': 'birth_tx',
+        'clc': 'closed_channels_count'
+    },
+    // Edge attributes
+    edge: {
+        'br': 'is_bridge_channel',
+        'ibr': 'is_important_bridge_channel',
+        'cc': 'connects_clusters',
+        'cap': 'total_capacity',
+        'cnt': 'channel_count',
+        'chs': 'channels'
+    },
+    // Channel object attributes (inside channels array)
+    channel: {
+        't': 'tier',
+        'cap': 'capacity',
+        'btx': 'birth_tx'
+    }
+};
+
+/**
+ * Maps a node from the new shortened format to the original format expected by the visualization code
+ * @param {Object} node - Node object with shortened attribute names
+ * @returns {Object} Node object with original attribute names
+ */
+function mapNodeAttributes(node) {
+    const mapped = { id: node.id };
+    
+    // Copy position if exists
+    if (node.x !== undefined) mapped.x = node.x;
+    if (node.y !== undefined) mapped.y = node.y;
+    
+    // Map all attributes
+    for (const [shortName, longName] of Object.entries(ATTRIBUTE_MAPPING.node)) {
+        if (node[shortName] !== undefined) {
+            mapped[longName] = node[shortName];
+        }
+    }
+    
+    return mapped;
+}
+
+/**
+ * Maps an edge from the new shortened format to the original format expected by the visualization code
+ * @param {Object} edge - Edge object with shortened attribute names
+ * @returns {Object} Edge object with original attribute names
+ */
+function mapEdgeAttributes(edge) {
+    const mapped = {
+        id: edge.id,
+        source: edge.source,
+        target: edge.target
+    };
+    
+    // Copy type if exists
+    if (edge.type !== undefined) mapped.type = edge.type;
+    
+    // Map all attributes
+    for (const [shortName, longName] of Object.entries(ATTRIBUTE_MAPPING.edge)) {
+        if (edge[shortName] !== undefined) {
+            // Special handling for channels array
+            if (shortName === 'chs' && Array.isArray(edge[shortName])) {
+                mapped[longName] = edge[shortName].map(mapChannelAttributes);
+            } else {
+                mapped[longName] = edge[shortName];
+            }
+        }
+    }
+    
+    // For backward compatibility, if edge has 'cap' (total_capacity), also set it as 'capacity'
+    if (mapped.total_capacity !== undefined) {
+        mapped.capacity = mapped.total_capacity;
+    }
+    
+    return mapped;
+}
+
+/**
+ * Maps a channel object from the new shortened format to the original format
+ * @param {Object} channel - Channel object with shortened attribute names
+ * @returns {Object} Channel object with original attribute names
+ */
+function mapChannelAttributes(channel) {
+    const mapped = {};
+    
+    for (const [shortName, longName] of Object.entries(ATTRIBUTE_MAPPING.channel)) {
+        if (channel[shortName] !== undefined) {
+            mapped[longName] = channel[shortName];
+        }
+    }
+    
+    return mapped;
+}
+
+// =============================================================================
 // CONFIGURATION CONSTANTS
 // =============================================================================
 
@@ -193,7 +313,7 @@ async function destroyVisualization() {
     const nodesCountEl = document.getElementById('summary-nodes-count');
     const channelsCountEl = document.getElementById('summary-channels-count');
     if (nodesCountEl) nodesCountEl.textContent = '0';
-    if (channelsCountEl) channelsCountEl.textContent = '0';
+    if (channelsCountEl) nodesCountEl.textContent = '0';
     
     // Clear search input
     const searchInput = document.getElementById('search-input');
@@ -569,13 +689,47 @@ function createTooltipManager(tooltipElement) {
             bridgeInfo = '<div style="color: #C8C8C8; font-weight: bold;">🌉 Bridge Channel</div>';
         }
         
+        // Multi-channel information (show when channel_count > 1)
+        let channelInfo = '';
+        const channelCount = attrs.channelCount;
+        const channels = attrs.channels;
+        
+        if (channelCount && channelCount > 1 && channels && Array.isArray(channels)) {
+            // Multiple channels
+            let individualChannels = '';
+            channels.forEach((channel, index) => {
+                const birthTx = channel.birth_tx || 'N/A';
+                individualChannels += `
+                    <div style="margin-bottom: 4px;">
+                        <div><strong>Channel ${index + 1}</strong></div>
+                        <div style="margin-left: 8px;">Capacity: ${formatCapacity(channel.capacity)}</div>
+                        <div style="margin-left: 8px;">Birth Tx: ${birthTx}</div>
+                    </div>
+                `;
+            });
+            
+            channelInfo = `
+                <div style="margin-top: 5px; padding: 5px; background: rgba(96, 165, 250, 0.1); border-left: 2px solid #60A5FA;">
+                    <div style="font-weight: bold; color: #60A5FA;">Multi-Channel (${channelCount})</div>
+                    ${individualChannels}
+                </div>
+            `;
+        } else {
+            // Single channel - get birth_tx from first channel in array or from edge ID
+            let birthTx = 'N/A';
+            if (channels && Array.isArray(channels) && channels.length > 0) {
+                birthTx = channels[0].birth_tx || 'N/A';
+            }
+            channelInfo = `<div>Birth Tx: ${birthTx}</div>`;
+        }
+        
         return `
             <div><strong>Channel</strong></div>
             ${bridgeInfo}
             <div>From: ${sourceNode.label}</div>
             <div>To: ${targetNode.label}</div>
             <div>Capacity: ${formatCapacity(attrs.capacity)}</div>
-            <div>Type: ${attrs.channelSizeTier}</div>
+            ${channelInfo}
         `;
     }
     
@@ -682,6 +836,40 @@ function createSidebarManager() {
                 </div>
             `;
         }
+        
+        // Channel information
+        let channelDetailsInfo = '';
+        const channelCount = attrs.channelCount;
+        const channels = attrs.channels;
+        
+        if (channelCount && channelCount > 1 && channels && Array.isArray(channels)) {
+            // Multi-channel
+            let individualChannelsHtml = '';
+            channels.forEach((channel, index) => {
+                const birthTx = channel.birth_tx || 'N/A';
+                individualChannelsHtml += `
+                    <div style="margin-bottom: 8px;">
+                        <div style="font-weight: bold;">Channel ${index + 1}</div>
+                        <div><span class="info-label">Capacity:</span> ${formatCapacity(channel.capacity)}</div>
+                        <div><span class="info-label">Birth Tx:</span> ${birthTx}</div>
+                    </div>
+                `;
+            });
+            
+            channelDetailsInfo = `
+                <div style="margin-top: 10px; padding: 10px; background: rgba(96, 165, 250, 0.1); border-left: 3px solid #60A5FA;">
+                    <div style="font-weight: bold; color: #60A5FA;">Multi-Channel Connection (${channelCount} channels)</div>
+                    ${individualChannelsHtml}
+                </div>
+            `;
+        } else {
+            // Single channel - get birth_tx from first channel in array
+            let birthTx = 'N/A';
+            if (channels && Array.isArray(channels) && channels.length > 0) {
+                birthTx = channels[0].birth_tx || 'N/A';
+            }
+            channelDetailsInfo = `<div><span class="info-label">Birth Transaction:</span> ${birthTx}</div>`;
+        }
 
         document.getElementById('edge-info').innerHTML = `
             <div class="info-title">Channel Details</div>
@@ -689,7 +877,7 @@ function createSidebarManager() {
                 <div><span class="info-label">From:</span> ${sourceNode.label}</div>
                 <div><span class="info-label">To:</span> ${targetNode.label}</div>
                 <div><span class="info-label">Capacity:</span> ${formatCapacity(attrs.capacity)}</div>
-                <div><span class="info-label">Channel Size Tier:</span> ${attrs.channelSizeTier}</div>
+                ${channelDetailsInfo}
                 ${bridgeInfo}
             </div>
         `;
@@ -973,9 +1161,13 @@ function createVisualization(data, jsonFile) {
     // Initialize the graph
     const graph = new graphology.Graph();
     
-    // Extract nodes and edges from the data
-    const nodes = data.nodes || [];
-    const edges = data.edges || [];
+    // Extract nodes and edges from the data and map them to original format
+    const rawNodes = data.nodes || [];
+    const rawEdges = data.edges || [];
+    
+    // Map nodes and edges from shortened format to original format
+    const nodes = rawNodes.map(mapNodeAttributes);
+    const edges = rawEdges.map(mapEdgeAttributes);
     
     // Store original positions for proper reset functionality
     const originalPositions = new Map();
@@ -1070,6 +1262,10 @@ function createVisualization(data, jsonFile) {
             const connectsClusters = edge.connects_clusters;
             const edgeBetweenness = edge.edge_betweenness;
             
+            // Multi-channel data
+            const channelCount = edge.channel_count || 1;
+            const channels = edge.channels || [];
+            
             // Get edge color (do not use color from data, only use bridge/highlight logic)
             const color = edge.is_important_bridge_channel ? EDGE_HIGHLIGHT.IMPORTANT_BRIDGE :
                           edge.is_bridge_channel ? EDGE_HIGHLIGHT.REGULAR_BRIDGE :
@@ -1091,7 +1287,9 @@ function createVisualization(data, jsonFile) {
                     isBridgeChannel: isBridgeChannel,
                     isImportantBridgeChannel: isImportantBridgeChannel,
                     connectsClusters: connectsClusters,
-                    edgeBetweenness: edgeBetweenness
+                    edgeBetweenness: edgeBetweenness,
+                    channelCount: channelCount,
+                    channels: channels
                 }
             });
         } catch (e) {

@@ -1082,11 +1082,10 @@ function createLayoutManager(graph, renderer, nodes, originalPositions) {
         renderer.refresh();
     }
     
-    function start(forceAtlas2, settings, toggleBtn) {
+    function start(forceAtlas2, settings) {
         if (isRunning) return;
         
         isRunning = true;
-        toggleBtn.innerHTML = '<i class="fas fa-pause"></i> Stop Layout';
         
         try {
             const runIteration = () => {
@@ -1096,7 +1095,7 @@ function createLayoutManager(graph, renderer, nodes, originalPositions) {
                     forceAtlas2.assign(graph, settings);
                     renderer.refresh();
                 } catch (error) {
-                    stop(toggleBtn);
+                    stop();
                 }
             };
             
@@ -1105,28 +1104,27 @@ function createLayoutManager(graph, renderer, nodes, originalPositions) {
             // Auto-stop and finalize
             setTimeout(async () => {
                 if (isRunning) {
-                    stop(toggleBtn);
+                    stop();
                     await finalizeLayout();
                 }
             }, 8000);
             
         } catch (error) {
-            stop(toggleBtn);
+            stop();
         }
     }
     
-    function stop(toggleBtn) {
+    function stop() {
         isRunning = false;
         if (intervalId) {
             clearInterval(intervalId);
             intervalId = null;
         }
-        toggleBtn.innerHTML = '<i class="fas fa-play"></i> Start Layout';
     }
     
     function reset() {
         if (isRunning) {
-            stop(document.getElementById('toggle-layout'));
+            stop();
         }
         
         // Restore original positions
@@ -1520,43 +1518,6 @@ function createVisualization(data, jsonFile) {
     const forceAtlas2 = window.graphologyLibrary?.layoutForceAtlas2 || 
                        window.graphology?.layoutForceAtlas2 ||
                        (typeof graphologyLayoutForceAtlas2 !== 'undefined' ? graphologyLayoutForceAtlas2 : null);
-
-    if (!forceAtlas2) {
-        // Handle missing layout library
-        const toggleLayoutBtn = document.getElementById('toggle-layout');
-        if (toggleLayoutBtn) {
-            toggleLayoutBtn.disabled = true;
-            toggleLayoutBtn.innerHTML = '<i class="fas fa-times"></i> Layout Unavailable';
-            toggleLayoutBtn.style.opacity = '0.5';
-            toggleLayoutBtn.style.cursor = 'not-allowed';
-        }
-    } else {
-        // ForceAtlas2 layout settings
-        const layoutSettings = {
-            iterations: 1,
-            gravity: 0.4,
-            scalingRatio: 60,
-            strongGravityMode: false,
-            slowDown: 1.2,
-            barnesHutOptimize: true,
-            barnesHutTheta: 0.5,
-            adjustSizes: false,
-            edgeWeightInfluence: 0.15
-        };
-
-        // Set up layout control button
-        const toggleLayoutBtn = document.getElementById('toggle-layout');
-        if (toggleLayoutBtn) {
-            controlButtonListeners.toggleLayout = () => {
-                if (layoutManager.isRunning) {
-                    layoutManager.stop(toggleLayoutBtn);
-                } else {
-                    layoutManager.start(forceAtlas2, layoutSettings, toggleLayoutBtn);
-                }
-            };
-            toggleLayoutBtn.addEventListener('click', controlButtonListeners.toggleLayout);
-        }
-    }
 
     // =============================================================================
     // FILTER SYSTEM

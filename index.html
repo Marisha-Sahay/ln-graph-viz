@@ -54,9 +54,13 @@
         <div id="sidebar">
             <!-- Dataset Switcher -->
             <div class="dataset-switcher">
-                <label for="dataset-select">
+                <label for="dataset-select" style="display: flex; align-items: center; gap: 8px;">
                     <i class="fas fa-database"></i>
                     Select Dataset
+                    <div style="position: relative;">
+                        <i class="fas fa-info-circle" id="dataset-info-icon" tabindex="0"></i>
+                        <span id="dataset-tooltip" class="dataset-tooltip">Freeway: >1 BTC channel<br>Highway: >5M sats channel<br>Complete: All nodes</span>
+                    </div>
                 </label>
                 <select id="dataset-select">
                     <option value="data/gfree.json" selected>Freeway Network</option>
@@ -288,8 +292,27 @@
                     filtersChevron.classList.add('fa-chevron-down');
                 }
             });
+
+            // Dataset tooltip
+            const infoIcon = document.getElementById('dataset-info-icon');
+            const tooltip = document.getElementById('dataset-tooltip');
+
+            infoIcon.addEventListener('mouseenter', () => {
+                tooltip.style.display = 'block';
+            });
+
+            infoIcon.addEventListener('mouseleave', () => {
+                tooltip.style.display = 'none';
+            });
+
+            infoIcon.addEventListener('focus', () => {
+                tooltip.style.display = 'block';
+            });
+
+            infoIcon.addEventListener('blur', () => {
+                tooltip.style.display = 'none';
+            });
         });
     </script>
 </body>
 </html>
-``` 

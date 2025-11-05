@@ -465,6 +465,24 @@ body.visualization-page .app-header {
     margin-bottom: 20px;
 }
 
+.dataset-tooltip {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(253, 251, 249, 0.95);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.4;
+    box-shadow: 0 2px 8px rgba(42, 51, 66, 0.15);
+    z-index: 1000;
+    display: none;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
 .dataset-switcher label {
     display: block;
     font-weight: 500;
@@ -476,6 +494,17 @@ body.visualization-page .app-header {
 .dataset-switcher label i {
     color: var(--primary);
     margin-right: 6px;
+}
+
+.dataset-switcher label i.fa-info-circle {
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.dataset-switcher label i.fa-info-circle:hover,
+.dataset-switcher label i.fa-info-circle:focus {
+    color: var(--primary);
 }
 
 .dataset-switcher select {
@@ -608,6 +637,7 @@ input[type="range"] {
     border-radius: 3px;
     background: var(--border);
     outline: none;
+    appearance: none;
     -webkit-appearance: none;
     margin: 8px 0;
 }

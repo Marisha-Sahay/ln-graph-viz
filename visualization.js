@@ -742,6 +742,15 @@ function createTooltipManager(tooltipElement) {
  * @returns {Object} API for sidebar operations
  */
 function createSidebarManager() {
+    function getCategoryDefinition(category) {
+        const definitions = {
+            'Freeway': ' (> 1 BTC channel)',
+            'Highway': ' (> 5M sats channel)',
+            'My Way': ' (other)'
+        };
+        return definitions[category] || '';
+    }
+
     function updateNodeInfo(nodeAttributes) {
         const attrs = nodeAttributes.attributes;
         
@@ -753,7 +762,8 @@ function createSidebarManager() {
                 
             if (categoryCountsObj && typeof categoryCountsObj === 'object') {
                 for (const [category, count] of Object.entries(categoryCountsObj)) {
-                    categoryCountsHtml += `<div><span class="info-label">${category}:</span> ${count}</div>`;
+                    const definition = getCategoryDefinition(category);
+                    categoryCountsHtml += `<div><span class="info-label">${category}${definition}:</span> ${count}</div>`;
                 }
             } else {
                 categoryCountsHtml = `<div>${attrs.categoryCount || 'N/A'}</div>`;

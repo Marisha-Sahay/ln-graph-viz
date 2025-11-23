@@ -1,6 +1,6 @@
 # Lightning Network Graph Visualization
 
-An interactive web-based visualization of the Lightning Network,updated daily,  developed by Bitcoin Data Labs. Explore Lightning Network nodes and channels through an intuitive, interactive interface with multiple dataset views and real-time statistics.
+An interactive web-based visualization of the Lightning Network, updated daily,  developed by Bitcoin Data Labs. Explore Lightning Network nodes and channels through an intuitive, interactive interface with multiple dataset views and real-time statistics.
 
 ## Features
 
@@ -30,9 +30,8 @@ An interactive web-based visualization of the Lightning Network,updated daily,  
    - **Layout Controls**: Start/stop the force-directed layout algorithm
 
 4. **Understanding the Visualization**:
-   - **Node Colors**: Represent different node types (LSP: Green, Exchange: Blue, Wallet: Yellow, etc.)
+   - **Node Colors**: Represent different clusters
    - **Node Size**: Based on number of channels (larger = more connections)
-   - **Edge Colors**: Represent channel types (Freeway: Pink, Highway: Indigo, Default: Gray)
    - **Edge Width**: Based on channel capacity (thicker = higher capacity)
 
 5. **Statistics**: View real-time network statistics in the top panel

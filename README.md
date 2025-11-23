@@ -1,6 +1,6 @@
 # Lightning Network Graph Visualization
 
-An interactive web-based visualization of the Lightning Network, developed by Bitcoin Data Labs. Explore Lightning Network nodes and channels through an intuitive, interactive interface with multiple dataset views and real-time statistics.
+An interactive web-based visualization of the Lightning Network,updated daily,  developed by Bitcoin Data Labs. Explore Lightning Network nodes and channels through an intuitive, interactive interface with multiple dataset views and real-time statistics.
 
 ## Features
 
@@ -12,32 +12,7 @@ An interactive web-based visualization of the Lightning Network, developed by Bi
 - **Real-time Statistics**: Live node/edge counts and total capacity
 - **Responsive Design**: Works on desktop and mobile devices
 
-## Getting Started
-
-### Prerequisites
-- Modern web browser (Chrome 90+, Firefox 88+, Safari 14+)
-- Local web server (for file loading security)
-
-### Quick Setup
-1. **Clone/Download the project**
-2. **Start a local server**:
-   ```bash
-   # Python 3
-   python -m http.server 8000
-   
-   # Python 2
-   python -m SimpleHTTPServer 8000
-   
-   # Node.js (if you have http-server installed)
-   npx http-server
-   
-   # VS Code Live Server extension
-   # Right-click index.html → "Open with Live Server"
-   ```
-3. **Open browser** and navigate to `http://localhost:8000`
-4. **Select a visualization** from the landing page
-
-### How to Use the Graphs
+## How to Use the Graphs
 
 1. **Dataset Selection**: On the landing page (`index.html`), choose from available datasets:
    - **All Channels** (`gall.json`): Complete network data (~2000+ nodes)
@@ -61,6 +36,9 @@ An interactive web-based visualization of the Lightning Network, developed by Bi
    - **Edge Width**: Based on channel capacity (thicker = higher capacity)
 
 5. **Statistics**: View real-time network statistics in the top panel
+
+## Tech Stack
+   Python for stats calculation, Javascript, Sigma.js for graph visualization
 
 For detailed technical information, see [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md).
 

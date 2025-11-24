@@ -15,9 +15,9 @@ An interactive web-based visualization of the Lightning Network, updated daily, 
 ## How to Use the Graphs
 
 1. **Dataset Selection**: On the landing page (`index.html`), choose from available datasets:
-   - **All Channels** (`gall.json`): Complete network data (~2000+ nodes)
-   - **Freeway Channels** (`gfree.json`): Freeway channels only
-   - **Highway Channels** (`ghigh.json`): Highway channels only
+   - **All Channels** (`gall.json`): Complete network data (12000+ nodes, 40K+ channels)
+   - **Freeway Channels** (`gfree.json`): Freeway channels (> 1BTC) only
+   - **Highway Channels** (`ghigh.json`): Highway channels (> 5m sats) only
 
 2. **Navigation**:
    - **Pan**: Click and drag to move around the graph
